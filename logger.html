@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
 <title>rpa_logger.logger API documentation</title>
-<meta name="description" content="The main interface for using the `rpa_logger` package." />
+<meta name="description" content="The main interface for using the `rpa_logger` package …" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -23,11 +23,16 @@
 </header>
 <section id="section-intro">
 <p>The main interface for using the <code><a title="rpa_logger" href="index.html">rpa_logger</a></code> package.</p>
+<p>This module contains the <code><a title="rpa_logger.logger.Logger" href="#rpa_logger.logger.Logger">Logger</a></code> class and default
+functions it uses for its callback parameters.</p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">&#39;&#39;&#39;The main interface for using the `rpa_logger` package.
+
+This module contains the `rpa_logger.logger.Logger` class and default
+functions it uses for its callback parameters.
 &#39;&#39;&#39;
 
 from collections import Counter
@@ -98,7 +103,7 @@ class Logger:
             self,
             animations: bool = True,
             colors: bool = True,
-            ascii_only: bool = True,
+            ascii_only: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
@@ -368,7 +373,7 @@ class Logger:
 <dl>
 <dt id="rpa_logger.logger.Logger"><code class="flex name class">
 <span>class <span class="ident">Logger</span></span>
-<span>(</span><span>animations: bool = True, colors: bool = True, ascii_only: bool = True, target: <class 'TextIO'> = None, multiple_fn: Callable[[int], str] = None, indicator_fn: Callable[[str, bool], Tuple[str, str]] = None)</span>
+<span>(</span><span>animations: bool = True, colors: bool = True, ascii_only: bool = False, target: <class 'TextIO'> = None, multiple_fn: Callable[[int], str] = None, indicator_fn: Callable[[str, bool], Tuple[str, str]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Interface for logging RPA tasks.</p>
@@ -415,7 +420,7 @@ the status indicator. Defaults to
             self,
             animations: bool = True,
             colors: bool = True,
-            ascii_only: bool = True,
+            ascii_only: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):

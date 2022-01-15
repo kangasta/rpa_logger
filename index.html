@@ -6,7 +6,7 @@
 <meta name="generator" content="pdoc 0.10.0" />
 <title>rpa_logger API documentation</title>
 <meta name="description" content="A simple python package for logging robotic process automation (RPA)
-progress." />
+progress …" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -25,12 +25,50 @@ progress." />
 <section id="section-intro">
 <p>A simple python package for logging robotic process automation (RPA)
 progress.</p>
+<h1 id="usage">Usage</h1>
+<p>The <code><a title="rpa_logger" href="#rpa_logger">rpa_logger</a></code> package is used to log tasks done by RPA or similar script. This is to communicate to the user what tasks are in progress and what tasks have been completed.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>The logging is done via <code><a title="rpa_logger.logger.Logger" href="logger.html#rpa_logger.logger.Logger">Logger</a></code> class. It provides <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code> and <code><a title="rpa_logger.logger.Logger.finish_task" href="logger.html#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code> methods for starting and finishing tasks, respectively. An simple hello world case could be <code>examples/hello_world.py</code>:</p>
+<pre><code class="language-python">from time import sleep
+from rpa_logger import Logger
+
+l = Logger()
+
+key = l.start_task('Hello world!')
+
+# Sleep 2 seconds to display the progress spinner
+sleep(2)
+
+l.finish_task('SUCCESS', key=key)
+</code></pre>
+<p>When finishing the task, task must be assigned an status. The status can be any string. The status is used to determine the status indicator for the task, for example <code>✓</code> or <code>✗</code>. This is done, by default, by the <code><a title="rpa_logger.logger.get_indicator" href="logger.html#rpa_logger.logger.get_indicator">get_indicator()</a></code> function.</p>
+<p>For short tasks, <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code> can be omitted. In this case task description should be given as parameter to the <code><a title="rpa_logger.logger.Logger.finish_task" href="logger.html#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code> method. Alternatively, <code><a title="rpa_logger.logger.Logger.log_task" href="logger.html#rpa_logger.logger.Logger.log_task">Logger.log_task()</a></code>, an alias for finish_task, can be used in this case.</p>
+<p>If task was started with <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code>, it must be stopped with <code><a title="rpa_logger.logger.Logger.finish_task" href="logger.html#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code> to stop printing the progress spinner.</p>
+<p>The tasks are indentified with keys. Keys are either provided as parameter when starting the task or, if the <code>key</code> parameter is omitted, new <code>uuid</code> is automatically generated. In both cases, the key used to identify the started task is returned by the <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code> method. A key can be anything that can be used as a dict <code>key</code>.</p>
+<h2 id="title-and-summary">Title and summary</h2>
+<p>In addition to logging tasks, the <code><a title="rpa_logger.logger.Logger" href="logger.html#rpa_logger.logger.Logger">Logger</a></code> provides <code><a title="rpa_logger.logger.Logger.title" href="logger.html#rpa_logger.logger.Logger.title">Logger.title()</a></code> and <code><a title="rpa_logger.logger.Logger.summary" href="logger.html#rpa_logger.logger.Logger.summary">Logger.summary()</a></code> methods for printing title and summary for the RPA process, respectively. Example usage of these methods is provided in <code>examples/title_and_summary.py</code>:</p>
+<pre><code class="language-python">from rpa_logger import Logger
+
+l = Logger()
+l.title(
+    'Demonstrate title and summary usage',
+    'Print title, log tasks with different statuses, and print summary')
+
+for status in ['SUCCESS', 'IGNORED', 'FAILURE', 'ERROR', 'SKIPPED', 'UNKNOWN']:
+    l.log_task(status, f'Demonstrate {status.lower()} status')
+
+# Summary returns number of non-ok tasks. Use that as exit code.
+code = l.summary()
+exit(code)
+</code></pre>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">&#39;&#39;&#39;A simple python package for logging robotic process automation (RPA)
 progress.
+
+.. include:: ./usage.md
 &#39;&#39;&#39;
 
 from ._version import __version__
@@ -40,13 +78,9 @@ from .logger import Logger</code></pre>
 <section>
 <h2 class="section-title" id="header-submodules">Sub-modules</h2>
 <dl>
-<dt><code class="name"><a title="rpa_logger.example" href="example.html">rpa_logger.example</a></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
 <dt><code class="name"><a title="rpa_logger.logger" href="logger.html">rpa_logger.logger</a></code></dt>
 <dd>
-<div class="desc"><p>The main interface for using the <code><a title="rpa_logger" href="#rpa_logger">rpa_logger</a></code> package.</p></div>
+<div class="desc"><p>The main interface for using the <code><a title="rpa_logger" href="#rpa_logger">rpa_logger</a></code> package …</p></div>
 </dd>
 <dt><code class="name"><a title="rpa_logger.task" href="task.html">rpa_logger.task</a></code></dt>
 <dd>
@@ -68,12 +102,17 @@ from .logger import Logger</code></pre>
 <nav id="sidebar">
 <h1>Index</h1>
 <div class="toc">
-<ul></ul>
+<ul>
+<li><a href="#usage">Usage</a><ul>
+<li><a href="#getting-started">Getting started</a></li>
+<li><a href="#title-and-summary">Title and summary</a></li>
+</ul>
+</li>
+</ul>
 </div>
 <ul id="index">
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
 <ul>
-<li><code><a title="rpa_logger.example" href="example.html">rpa_logger.example</a></code></li>
 <li><code><a title="rpa_logger.logger" href="logger.html">rpa_logger.logger</a></code></li>
 <li><code><a title="rpa_logger.task" href="task.html">rpa_logger.task</a></code></li>
 <li><code><a title="rpa_logger.utils" href="utils/index.html">rpa_logger.utils</a></code></li>
