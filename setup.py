@@ -21,6 +21,11 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/kangasta/rpa_logger",
+    project_urls={
+        'Documentation': 'https://kangasta.github.io/rpa_logger/',
+        'Source': 'https://github.com/kangasta/rpa_logger/',
+        'Tracker': 'https://github.com/kangasta/rpa_logger/issues/',
+    },
     packages=setuptools.find_packages(),
     classifiers=(
         "Programming Language :: Python :: 3",
