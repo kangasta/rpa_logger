@@ -1,3 +1,6 @@
+'''The main interface for using the `rpa_logger` package.
+'''
+
 from collections import Counter
 from sys import stdout
 from textwrap import indent
@@ -10,6 +13,16 @@ from .utils.terminal import clear_current_row, print_spinner_and_text, COLORS
 
 
 def get_indicator(status: str, ascii_only: bool = False) -> Tuple[str, str]:
+    '''Default value for `indicator_fn` parameter of
+    `rpa_logger.logger.Logger`.
+
+    Args:
+        status: Status of the task to be logged.
+        ascii_only: If true, use ascii only characters.
+
+    Returns:
+        Tuple of color and character to use as the status indicator.
+    '''
     if status == SUCCESS:
         return ('green', '✓' if not ascii_only else 'Y',)
     if status == IGNORED:
@@ -25,10 +38,33 @@ def get_indicator(status: str, ascii_only: bool = False) -> Tuple[str, str]:
 
 
 def multiple_active_text(num_active: int) -> str:
+    '''Default value for `multiple_fn` parameter of `rpa_logger.logger.Logger`.
+
+    Args:
+        num_active: Number of currently active tasks.
+
+    Returns:
+        String to print when multiple tasks are in progress.
+    '''
     return f'{num_active} tasks in progress'
 
 
 class Logger:
+    '''Interface for logging RPA tasks.
+
+    Args:
+        animations: If true, progress indicator is displayed.
+        colors: If true, ANSI escape codes are used when logging to console.
+        ascii_only: If true, use ascii only spinner and status indicators.
+        target: File to print output to. Defaults to stdout.
+        multiple_fn: Function used to determine progress message when multiple
+            tasks are in progress. Defaults to
+            `rpa_logger.logger.multiple_active_text`.
+        indicator_fn: Function used to determine the color and character for
+            the status indicator. Defaults to
+            `rpa_logger.logger.get_indicator`.
+    '''
+
     def __init__(
             self,
             animations: bool = True,
@@ -51,26 +87,55 @@ class Logger:
         self._spinner_thread = None
         self._spinner_stop_event = Event()
 
-    def bold(self, text: str):
+    def bold(self, text: str) -> str:
+        '''Bold given text with ANSI escape codes.
+
+        Args:
+            text: Text to be formatted.
+
+        Returns:
+            String with formatted text.
+        '''
         if not self._colors:
             return text
         return f'\033[1m{text}\033[22m'
 
-    def color(self, text: str, color: str):
+    def color(self, text: str, color: str) -> str:
+        '''Color given text with ANSI escape codes.
+
+        Args:
+            text: Text to be formatted.
+            color: Color to format text with. See
+                `rpa_logger.utils.terminal.COLORS` for available values.
+
+        Returns:
+            String with formatted text.
+        '''
         if not self._colors or color not in COLORS:
             return text
-        return f'\033[{COLORS[color]}m{text}\033[0m'
+        return f'\033[{COLORS[color]}m{text}\033[39m'
 
     def _print(self, *args, **kwargs):
         return print(*args, file=self._target, **kwargs)
 
-    def error(self, text: str):
+    def error(self, text: str) -> None:
+        '''Print error message.
+
+        Args:
+            text: Error message text.
+        '''
         error_text = self.bold(self.color('ERROR:', 'red'))
         self._print(f'{error_text} {text}')
 
-    def title(self, name: str = None, description: str = None):
-        name_text = f'{self.bold(name)}\n' if name else ''
-        self._print(f'{name_text}{description or ""}\n')
+    def title(self, title: str = None, description: str = None) -> None:
+        '''Print title and description of the RPA process.
+
+        Args:
+            title: Title to print in bold.
+            description: Description to print under the title.
+        '''
+        title_text = f'{self.bold(title)}\n' if title else ''
+        self._print(f'{title_text}{description or ""}\n')
 
     def _print_active(self):
         if not self._animations:
@@ -98,6 +163,16 @@ class Logger:
         self._spinner_thread.start()
 
     def start_task(self, text: str, key: Hashable = None) -> Hashable:
+        '''Create a new active task and print progress indicator.
+
+        Args:
+            text: Name or description of the task.
+            key: Key to identify the task with. If not provided, new uuid4
+                will be used.
+
+        Return:
+            Key to control to the created task with.
+        '''
         if not key:
             key = uuid4()
 
@@ -106,6 +181,10 @@ class Logger:
         return key
 
     def stop_progress_animation(self) -> None:
+        '''Stop possible active progress indicators.
+        Should be used, for example, if the application is interrupted while
+        there are active progress indicators.
+        '''
         self._spinner_stop_event.set()
         if self._spinner_thread:
             self._spinner_thread.join()
@@ -120,6 +199,17 @@ class Logger:
             status: str,
             text: str = None,
             key: Hashable = None) -> None:
+        '''Finish active or new task and print its status.
+
+        Calling this method is required to stop the progress spinner of a
+        previously started task.
+
+        Args:
+            status: Status string used to determine the status indicator.
+            text: Text to describe the task with. Defaults to the text used
+                when the task was created if `key` is given.
+            key: Key of the previously created task to be finished.
+        '''
         self.stop_progress_animation()
 
         if key:
@@ -139,9 +229,18 @@ class Logger:
         self._print_active()
 
     def log_task(self, status: str, text: str) -> None:
+        '''Alias for `rpa_logger.logger.Logger.finish_task`.
+        This method can be used when the task to be logged was not previously
+        started.
+        '''
         return self.finish_task(status, text)
 
     def summary(self) -> int:
+        '''Print summary of the logged tasks.
+
+        Returns:
+            Number of failed (status is either `FAILURE` or `ERROR`) tasks.
+        '''
         summary = Counter(self._results)
 
         text = self.bold('Summary:')
