@@ -8,6 +8,16 @@
 
 A simple python package for logging robotic process automation (RPA) progress.
 
+## Getting started
+
+This package is available in PyPI as [rpa-logger](https://pypi.org/project/rpa-logger/). To install, run:
+
+```bash
+pip3 install rpa-logger
+```
+
+See [package documentation](https://kangasta.github.io/rpa_logger/) and `examples` directory for instructions on getting started with the package usage.
+
 ## Documentation
 
 The documentation for `main` branch is available in [GitHub pages](https://kangasta.github.io/rpa_logger/). It is generated with [pdoc](https://github.com/pdoc3/pdoc):
