@@ -10,7 +10,7 @@ A simple python package for logging robotic process automation (RPA) progress.
 
 ## Documentation
 
-The documentation is generated with [pdoc](https://github.com/pdoc3/pdoc):
+The documentation for `main` branch is available in [GitHub pages](https://kangasta.github.io/rpa_logger/). It is generated with [pdoc](https://github.com/pdoc3/pdoc):
 
 ```bash
 pdoc --html --output-dir docs rpa_logger
