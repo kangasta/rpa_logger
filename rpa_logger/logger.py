@@ -1,4 +1,7 @@
 '''The main interface for using the `rpa_logger` package.
+
+This module contains the `rpa_logger.logger.Logger` class and default
+functions it uses for its callback parameters.
 '''
 
 from collections import Counter
@@ -69,7 +72,7 @@ class Logger:
             self,
             animations: bool = True,
             colors: bool = True,
-            ascii_only: bool = True,
+            ascii_only: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
