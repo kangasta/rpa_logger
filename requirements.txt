@@ -6,3 +6,6 @@ pylint
 
 # Unittest
 coverage
+
+# Docs
+pdoc3
