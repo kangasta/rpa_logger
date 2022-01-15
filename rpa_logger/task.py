@@ -1,3 +1,6 @@
+'''Constants and helpers for describing RPA tasks and their status.
+'''
+
 STARTED = 'STARTED'
 SUCCESS = 'SUCCESS'
 IGNORED = 'IGNORED'
