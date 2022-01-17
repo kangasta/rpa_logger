@@ -34,6 +34,8 @@ def get_indicator(status: str, ascii_only: bool = False) -> Tuple[str, str]:
         return ('yellow', '!',)
     elif status == SKIPPED:
         return ('blue', '–',)
+    elif status == STARTED:
+        return ('white', '#',)
     else:
         return ('grey', '?',)
 
@@ -71,12 +73,14 @@ class Logger:
             animations: bool = True,
             colors: bool = True,
             ascii_only: bool = False,
+            print_output_immediately: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
         self._animations = animations
         self._colors = colors
         self._ascii_only = ascii_only
+        self._print_output_immediately = print_output_immediately
         self._target = target or stdout
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
@@ -138,7 +142,7 @@ class Logger:
         self.suite.name = title
         self.suite.description = description
 
-        title_text = f'{self.suite.name}\n' if title else ''
+        title_text = f'{self.bold(title)}\n' if title else ''
         self._print(f'{title_text}{description or ""}\n')
 
     def _print_active(self):
@@ -166,6 +170,17 @@ class Logger:
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
+    def _get_indicator_text(self, status):
+        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        return self.bold(self.color(symbol, color))
+
+    def _print_task(self, key):
+        task = self.suite.get_task(key)
+        indicator_text = self._get_indicator_text(task.status)
+        indented_text = indent(task.name, '  ').strip()
+
+        self._print(f'{indicator_text} {indented_text}\n')
+
     def start_task(self, text: str, key: Hashable = None) -> Hashable:
         '''Create a new active task and print progress indicator.
 
@@ -177,7 +192,13 @@ class Logger:
         Return:
             Key to control to the created task with.
         '''
-        return self.suite.create_task(text, key)
+        key = self.suite.create_task(text, key)
+
+        if self._print_output_immediately:
+            self._print_task(key)
+
+        self._print_active()
+        return key
 
     def stop_progress_animation(self) -> None:
         '''Stop possible active progress indicators.
@@ -188,10 +209,6 @@ class Logger:
         if self._spinner_thread:
             self._spinner_thread.join()
             self._spinner_thread = None
-
-    def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
-        return self.bold(self.color(symbol, color))
 
     def finish_task(
             self,
@@ -218,17 +235,22 @@ class Logger:
             return self.log_task(status, text)
 
         self.suite.finish_task(key, status)
+
         task = self.suite.get_task(key)
-        start_text = task.name
-        text = text or start_text
+        if text:
+            task.name = text
 
-        indicator_text = self._get_indicator_text(status)
-        indented_text = indent(text, '  ').strip()
+        if self._print_output_immediately and task.output:
+            clear_current_row(self._target)
+            self._print('')
 
-        self._print(f'{indicator_text} {indented_text}\n')
+        self._print_task(key)
 
-        output_text = indent('\n'.join(i.text for i in task.output), '  ')
-        self._print(f'{output_text}\n')
+        if not self._print_output_immediately:
+            output_text = indent(
+                '\n'.join(i.text for i in task.output), '  ').rstrip()
+            if output_text:
+                self._print(f'{output_text}\n')
 
         self._print_active()
 
@@ -242,7 +264,10 @@ class Logger:
             status: Status to use for the finished task.
             text: Name of the task.
         '''
-        return self.suite.log_task(status, text)
+        key = self.suite.log_task(status, text)
+        self._print_task(key)
+        self._print_active()
+        return key
 
     def log_metadata(
             self,
@@ -269,7 +294,12 @@ class Logger:
             text: Output text content.
             stream: Output stream. Defaults to `stdout`.
         '''
-        return self.suite.log_output(key, text, stream)
+        if self._print_output_immediately:
+            self.stop_progress_animation()
+            self._print(indent(text, '  '))
+            self._print_active()
+
+        self.suite.log_output(key, text, stream)
 
     def finish_suite(self) -> None:
         '''Finish loggers task suite
