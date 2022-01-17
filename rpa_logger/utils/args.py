@@ -1,7 +1,19 @@
+'''Helpers for adding Logger parameters to `ArgumentParser` and parsing
+`rpa_logger.logger.Logger` parameters from parsed command line arguments.
+'''
 from argparse import ArgumentParser, Namespace
 
 
 def get_argparser(parser: ArgumentParser = None) -> ArgumentParser:
+    '''Get `ArgumentParser` with `rpa_logger.logger.Logger` arguments
+
+    Args:
+        parser: `ArgumentParser` to add arguments to. If None, new
+            `ArgumentParser` will be created.
+
+    Returns:
+        Created or modified `ArgumentParser`.
+    '''
     if not parser:
         parser = ArgumentParser()
 
@@ -31,6 +43,15 @@ def get_argparser(parser: ArgumentParser = None) -> ArgumentParser:
 
 
 def get_rpa_logger_parameters(args: Namespace) -> dict:
+    '''Parse `rpa_logger.logger.Logger` parameters from parsed command line
+    arguments.
+
+    Args:
+        args: Parsed command line arguments.
+
+    Returns:
+        `dict` with `rpa_logger.logger.Logger` parameters.
+    '''
     return dict(
         animations=args.animation,
         colors=args.colors,
