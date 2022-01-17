@@ -35,12 +35,10 @@ This module contains the `rpa_logger.logger.Logger` class and default
 functions it uses for its callback parameters.
 &#39;&#39;&#39;
 
-from collections import Counter
 from sys import stdout
 from textwrap import indent
 from threading import Event, Thread
 from typing import Callable, Hashable, Tuple, TextIO
-from uuid import uuid4
 
 from .task import *
 from .utils.terminal import clear_current_row, print_spinner_and_text, COLORS
@@ -67,6 +65,8 @@ def get_indicator(status: str, ascii_only: bool = False) -&gt; Tuple[str, str]:
         return (&#39;yellow&#39;, &#39;!&#39;,)
     elif status == SKIPPED:
         return (&#39;blue&#39;, &#39;–&#39;,)
+    elif status == STARTED:
+        return (&#39;white&#39;, &#39;#&#39;,)
     else:
         return (&#39;grey&#39;, &#39;?&#39;,)
 
@@ -104,22 +104,24 @@ class Logger:
             animations: bool = True,
             colors: bool = True,
             ascii_only: bool = False,
+            print_output_immediately: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
         self._animations = animations
         self._colors = colors
         self._ascii_only = ascii_only
+        self._print_output_immediately = print_output_immediately
         self._target = target or stdout
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
 
-        self._active_tasks = dict()
-        self._results = []
-
         self._spinner_thread = None
         self._spinner_stop_event = Event()
+
+        self.suite = TaskSuite(None)
+        &#39;&#39;&#39;`rpa_logger.task.TaskSuite` where logger stores task data.&#39;&#39;&#39;
 
     def bold(self, text: str) -&gt; str:
         &#39;&#39;&#39;Bold given text with ANSI escape codes.
@@ -168,6 +170,9 @@ class Logger:
             title: Title to print in bold.
             description: Description to print under the title.
         &#39;&#39;&#39;
+        self.suite.name = title
+        self.suite.description = description
+
         title_text = f&#39;{self.bold(title)}\n&#39; if title else &#39;&#39;
         self._print(f&#39;{title_text}{description or &#34;&#34;}\n&#39;)
 
@@ -175,13 +180,13 @@ class Logger:
         if not self._animations:
             return
 
-        num_active = len(self._active_tasks)
+        num_active = len(self.suite.active_tasks)
         if not num_active:
             return
         elif num_active &gt; 1:
             text = self._get_multiple_active_str(num_active)
         else:
-            text = list(self._active_tasks.values())[0]
+            text = self.suite.active_tasks[0].name
 
         clear_current_row(self._target)
         self.stop_progress_animation()
@@ -196,6 +201,17 @@ class Logger:
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
+    def _get_indicator_text(self, status):
+        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        return self.bold(self.color(symbol, color))
+
+    def _print_task(self, key):
+        task = self.suite.get_task(key)
+        indicator_text = self._get_indicator_text(task.status)
+        indented_text = indent(task.name, &#39;  &#39;).strip()
+
+        self._print(f&#39;{indicator_text} {indented_text}\n&#39;)
+
     def start_task(self, text: str, key: Hashable = None) -&gt; Hashable:
         &#39;&#39;&#39;Create a new active task and print progress indicator.
 
@@ -207,10 +223,11 @@ class Logger:
         Return:
             Key to control to the created task with.
         &#39;&#39;&#39;
-        if not key:
-            key = uuid4()
+        key = self.suite.create_task(text, key)
 
-        self._active_tasks[key] = text
+        if self._print_output_immediately:
+            self._print_task(key)
+
         self._print_active()
         return key
 
@@ -223,10 +240,6 @@ class Logger:
         if self._spinner_thread:
             self._spinner_thread.join()
             self._spinner_thread = None
-
-    def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
-        return self.bold(self.color(symbol, color))
 
     def finish_task(
             self,
@@ -246,28 +259,89 @@ class Logger:
         &#39;&#39;&#39;
         self.stop_progress_animation()
 
-        if key:
-            start_text = self._active_tasks.pop(key, None)
-            text = text or start_text
+        if not key:
+            if not text:
+                raise RuntimeError(
+                    f&#39;No text provided or found for given key ({key}).&#39;)
+            return self.log_task(status, text)
 
-        if not text:
-            raise RuntimeError(
-                f&#39;No text provided or found for given key ({key}).&#39;)
+        self.suite.finish_task(key, status)
 
-        self._results.append(status)
+        task = self.suite.get_task(key)
+        if text:
+            task.name = text
 
-        indicator_text = self._get_indicator_text(status)
-        indented_text = indent(text, &#39;  &#39;).strip()
+        if self._print_output_immediately and task.output:
+            clear_current_row(self._target)
+            self._print(&#39;&#39;)
 
-        self._print(f&#39;{indicator_text} {indented_text}\n&#39;)
+        self._print_task(key)
+
+        if not self._print_output_immediately:
+            output_text = indent(
+                &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
+            if output_text:
+                self._print(f&#39;{output_text}\n&#39;)
+
         self._print_active()
 
     def log_task(self, status: str, text: str) -&gt; None:
-        &#39;&#39;&#39;Alias for `rpa_logger.logger.Logger.finish_task`.
+        &#39;&#39;&#39;Create and finish a new task.
+
         This method can be used when the task to be logged was not previously
         started.
+
+        Args:
+            status: Status to use for the finished task.
+            text: Name of the task.
         &#39;&#39;&#39;
-        return self.finish_task(status, text)
+        key = self.suite.log_task(status, text)
+        self._print_task(key)
+        self._print_active()
+        return key
+
+    def log_metadata(
+            self,
+            key: str,
+            value: Any,
+            task_key: Hashable = None) -&gt; None:
+        &#39;&#39;&#39;Log metadata into the loggers task suite or any of its tasks.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+            task_key: Key of a task to log metadata into. If None, metadata
+                is logged to the suite.
+        &#39;&#39;&#39;
+        return self.suite.log_metadata(key, value, task_key)
+
+    def log_output(self, key: Hashable, text: str,
+                   stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            key: Key of the task to log output to.
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        if self._print_output_immediately:
+            self.stop_progress_animation()
+            self._print(indent(text, &#39;  &#39;))
+            self._print_active()
+
+        self.suite.log_output(key, text, stream)
+
+    def finish_suite(self) -&gt; None:
+        &#39;&#39;&#39;Finish loggers task suite
+        &#39;&#39;&#39;
+        summary = self.suite.task_status_counter
+        if summary.get(FAILURE, 0) + summary.get(ERROR, 0) &gt; 0:
+            status = SUCCESS
+        else:
+            status = ERROR
+
+        return self.suite.finish(status)
 
     def summary(self) -&gt; int:
         &#39;&#39;&#39;Print summary of the logged tasks.
@@ -275,7 +349,7 @@ class Logger:
         Returns:
             Number of failed (status is either `FAILURE` or `ERROR`) tasks.
         &#39;&#39;&#39;
-        summary = Counter(self._results)
+        summary = self.suite.task_status_counter
 
         text = self.bold(&#39;Summary:&#39;)
         for status in summary:
@@ -334,6 +408,8 @@ class Logger:
         return (&#39;yellow&#39;, &#39;!&#39;,)
     elif status == SKIPPED:
         return (&#39;blue&#39;, &#39;–&#39;,)
+    elif status == STARTED:
+        return (&#39;white&#39;, &#39;#&#39;,)
     else:
         return (&#39;grey&#39;, &#39;?&#39;,)</code></pre>
 </details>
@@ -373,7 +449,7 @@ class Logger:
 <dl>
 <dt id="rpa_logger.logger.Logger"><code class="flex name class">
 <span>class <span class="ident">Logger</span></span>
-<span>(</span><span>animations: bool = True, colors: bool = True, ascii_only: bool = False, target: <class 'TextIO'> = None, multiple_fn: Callable[[int], str] = None, indicator_fn: Callable[[str, bool], Tuple[str, str]] = None)</span>
+<span>(</span><span>animations: bool = True, colors: bool = True, ascii_only: bool = False, print_output_immediately: bool = False, target: <class 'TextIO'> = None, multiple_fn: Callable[[int], str] = None, indicator_fn: Callable[[str, bool], Tuple[str, str]] = None)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Interface for logging RPA tasks.</p>
@@ -421,22 +497,24 @@ the status indicator. Defaults to
             animations: bool = True,
             colors: bool = True,
             ascii_only: bool = False,
+            print_output_immediately: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
         self._animations = animations
         self._colors = colors
         self._ascii_only = ascii_only
+        self._print_output_immediately = print_output_immediately
         self._target = target or stdout
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
 
-        self._active_tasks = dict()
-        self._results = []
-
         self._spinner_thread = None
         self._spinner_stop_event = Event()
+
+        self.suite = TaskSuite(None)
+        &#39;&#39;&#39;`rpa_logger.task.TaskSuite` where logger stores task data.&#39;&#39;&#39;
 
     def bold(self, text: str) -&gt; str:
         &#39;&#39;&#39;Bold given text with ANSI escape codes.
@@ -485,6 +563,9 @@ the status indicator. Defaults to
             title: Title to print in bold.
             description: Description to print under the title.
         &#39;&#39;&#39;
+        self.suite.name = title
+        self.suite.description = description
+
         title_text = f&#39;{self.bold(title)}\n&#39; if title else &#39;&#39;
         self._print(f&#39;{title_text}{description or &#34;&#34;}\n&#39;)
 
@@ -492,13 +573,13 @@ the status indicator. Defaults to
         if not self._animations:
             return
 
-        num_active = len(self._active_tasks)
+        num_active = len(self.suite.active_tasks)
         if not num_active:
             return
         elif num_active &gt; 1:
             text = self._get_multiple_active_str(num_active)
         else:
-            text = list(self._active_tasks.values())[0]
+            text = self.suite.active_tasks[0].name
 
         clear_current_row(self._target)
         self.stop_progress_animation()
@@ -513,6 +594,17 @@ the status indicator. Defaults to
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
+    def _get_indicator_text(self, status):
+        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        return self.bold(self.color(symbol, color))
+
+    def _print_task(self, key):
+        task = self.suite.get_task(key)
+        indicator_text = self._get_indicator_text(task.status)
+        indented_text = indent(task.name, &#39;  &#39;).strip()
+
+        self._print(f&#39;{indicator_text} {indented_text}\n&#39;)
+
     def start_task(self, text: str, key: Hashable = None) -&gt; Hashable:
         &#39;&#39;&#39;Create a new active task and print progress indicator.
 
@@ -524,10 +616,11 @@ the status indicator. Defaults to
         Return:
             Key to control to the created task with.
         &#39;&#39;&#39;
-        if not key:
-            key = uuid4()
+        key = self.suite.create_task(text, key)
 
-        self._active_tasks[key] = text
+        if self._print_output_immediately:
+            self._print_task(key)
+
         self._print_active()
         return key
 
@@ -540,10 +633,6 @@ the status indicator. Defaults to
         if self._spinner_thread:
             self._spinner_thread.join()
             self._spinner_thread = None
-
-    def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
-        return self.bold(self.color(symbol, color))
 
     def finish_task(
             self,
@@ -563,28 +652,89 @@ the status indicator. Defaults to
         &#39;&#39;&#39;
         self.stop_progress_animation()
 
-        if key:
-            start_text = self._active_tasks.pop(key, None)
-            text = text or start_text
+        if not key:
+            if not text:
+                raise RuntimeError(
+                    f&#39;No text provided or found for given key ({key}).&#39;)
+            return self.log_task(status, text)
 
-        if not text:
-            raise RuntimeError(
-                f&#39;No text provided or found for given key ({key}).&#39;)
+        self.suite.finish_task(key, status)
 
-        self._results.append(status)
+        task = self.suite.get_task(key)
+        if text:
+            task.name = text
 
-        indicator_text = self._get_indicator_text(status)
-        indented_text = indent(text, &#39;  &#39;).strip()
+        if self._print_output_immediately and task.output:
+            clear_current_row(self._target)
+            self._print(&#39;&#39;)
 
-        self._print(f&#39;{indicator_text} {indented_text}\n&#39;)
+        self._print_task(key)
+
+        if not self._print_output_immediately:
+            output_text = indent(
+                &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
+            if output_text:
+                self._print(f&#39;{output_text}\n&#39;)
+
         self._print_active()
 
     def log_task(self, status: str, text: str) -&gt; None:
-        &#39;&#39;&#39;Alias for `rpa_logger.logger.Logger.finish_task`.
+        &#39;&#39;&#39;Create and finish a new task.
+
         This method can be used when the task to be logged was not previously
         started.
+
+        Args:
+            status: Status to use for the finished task.
+            text: Name of the task.
         &#39;&#39;&#39;
-        return self.finish_task(status, text)
+        key = self.suite.log_task(status, text)
+        self._print_task(key)
+        self._print_active()
+        return key
+
+    def log_metadata(
+            self,
+            key: str,
+            value: Any,
+            task_key: Hashable = None) -&gt; None:
+        &#39;&#39;&#39;Log metadata into the loggers task suite or any of its tasks.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+            task_key: Key of a task to log metadata into. If None, metadata
+                is logged to the suite.
+        &#39;&#39;&#39;
+        return self.suite.log_metadata(key, value, task_key)
+
+    def log_output(self, key: Hashable, text: str,
+                   stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            key: Key of the task to log output to.
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        if self._print_output_immediately:
+            self.stop_progress_animation()
+            self._print(indent(text, &#39;  &#39;))
+            self._print_active()
+
+        self.suite.log_output(key, text, stream)
+
+    def finish_suite(self) -&gt; None:
+        &#39;&#39;&#39;Finish loggers task suite
+        &#39;&#39;&#39;
+        summary = self.suite.task_status_counter
+        if summary.get(FAILURE, 0) + summary.get(ERROR, 0) &gt; 0:
+            status = SUCCESS
+        else:
+            status = ERROR
+
+        return self.suite.finish(status)
 
     def summary(self) -&gt; int:
         &#39;&#39;&#39;Print summary of the logged tasks.
@@ -592,7 +742,7 @@ the status indicator. Defaults to
         Returns:
             Number of failed (status is either `FAILURE` or `ERROR`) tasks.
         &#39;&#39;&#39;
-        summary = Counter(self._results)
+        summary = self.suite.task_status_counter
 
         text = self.bold(&#39;Summary:&#39;)
         for status in summary:
@@ -603,6 +753,13 @@ the status indicator. Defaults to
 
         return summary.get(FAILURE, 0) + summary.get(ERROR, 0)</code></pre>
 </details>
+<h3>Instance variables</h3>
+<dl>
+<dt id="rpa_logger.logger.Logger.suite"><code class="name">var <span class="ident">suite</span></code></dt>
+<dd>
+<div class="desc"><p><code><a title="rpa_logger.task.TaskSuite" href="task.html#rpa_logger.task.TaskSuite">TaskSuite</a></code> where logger stores task data.</p></div>
+</dd>
+</dl>
 <h3>Methods</h3>
 <dl>
 <dt id="rpa_logger.logger.Logger.bold"><code class="name flex">
@@ -694,6 +851,27 @@ the status indicator. Defaults to
     self._print(f&#39;{error_text} {text}&#39;)</code></pre>
 </details>
 </dd>
+<dt id="rpa_logger.logger.Logger.finish_suite"><code class="name flex">
+<span>def <span class="ident">finish_suite</span></span>(<span>self) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Finish loggers task suite</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def finish_suite(self) -&gt; None:
+    &#39;&#39;&#39;Finish loggers task suite
+    &#39;&#39;&#39;
+    summary = self.suite.task_status_counter
+    if summary.get(FAILURE, 0) + summary.get(ERROR, 0) &gt; 0:
+        status = SUCCESS
+    else:
+        status = ERROR
+
+    return self.suite.finish(status)</code></pre>
+</details>
+</dd>
 <dt id="rpa_logger.logger.Logger.finish_task"><code class="name flex">
 <span>def <span class="ident">finish_task</span></span>(<span>self, status: str, text: str = None, key: Hashable[] = None) ‑> None</span>
 </code></dt>
@@ -733,40 +911,137 @@ when the task was created if <code>key</code> is given.</dd>
     &#39;&#39;&#39;
     self.stop_progress_animation()
 
-    if key:
-        start_text = self._active_tasks.pop(key, None)
-        text = text or start_text
+    if not key:
+        if not text:
+            raise RuntimeError(
+                f&#39;No text provided or found for given key ({key}).&#39;)
+        return self.log_task(status, text)
 
-    if not text:
-        raise RuntimeError(
-            f&#39;No text provided or found for given key ({key}).&#39;)
+    self.suite.finish_task(key, status)
 
-    self._results.append(status)
+    task = self.suite.get_task(key)
+    if text:
+        task.name = text
 
-    indicator_text = self._get_indicator_text(status)
-    indented_text = indent(text, &#39;  &#39;).strip()
+    if self._print_output_immediately and task.output:
+        clear_current_row(self._target)
+        self._print(&#39;&#39;)
 
-    self._print(f&#39;{indicator_text} {indented_text}\n&#39;)
+    self._print_task(key)
+
+    if not self._print_output_immediately:
+        output_text = indent(
+            &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
+        if output_text:
+            self._print(f&#39;{output_text}\n&#39;)
+
     self._print_active()</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.logger.Logger.log_metadata"><code class="name flex">
+<span>def <span class="ident">log_metadata</span></span>(<span>self, key: str, value: Any, task_key: Hashable[] = None) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Log metadata into the loggers task suite or any of its tasks.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key for the metadata item.</dd>
+<dt><strong><code>value</code></strong></dt>
+<dd>Value for the metadata item. If task data is saved as json
+or yaml, this value must be serializable.</dd>
+<dt><strong><code>task_key</code></strong></dt>
+<dd>Key of a task to log metadata into. If None, metadata
+is logged to the suite.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_metadata(
+        self,
+        key: str,
+        value: Any,
+        task_key: Hashable = None) -&gt; None:
+    &#39;&#39;&#39;Log metadata into the loggers task suite or any of its tasks.
+
+    Args:
+        key: Key for the metadata item.
+        value: Value for the metadata item. If task data is saved as json
+            or yaml, this value must be serializable.
+        task_key: Key of a task to log metadata into. If None, metadata
+            is logged to the suite.
+    &#39;&#39;&#39;
+    return self.suite.log_metadata(key, value, task_key)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.logger.Logger.log_output"><code class="name flex">
+<span>def <span class="ident">log_output</span></span>(<span>self, key: Hashable[], text: str, stream: str = 'stdout') ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Append new <code><a title="rpa_logger.utils.output.OutputText" href="utils/output.html#rpa_logger.utils.output.OutputText">OutputText</a></code> to task output.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key of the task to log output to.</dd>
+<dt><strong><code>text</code></strong></dt>
+<dd>Output text content.</dd>
+<dt><strong><code>stream</code></strong></dt>
+<dd>Output stream. Defaults to <code>stdout</code>.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_output(self, key: Hashable, text: str,
+               stream: str = &#39;stdout&#39;) -&gt; None:
+    &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+    Args:
+        key: Key of the task to log output to.
+        text: Output text content.
+        stream: Output stream. Defaults to `stdout`.
+    &#39;&#39;&#39;
+    if self._print_output_immediately:
+        self.stop_progress_animation()
+        self._print(indent(text, &#39;  &#39;))
+        self._print_active()
+
+    self.suite.log_output(key, text, stream)</code></pre>
 </details>
 </dd>
 <dt id="rpa_logger.logger.Logger.log_task"><code class="name flex">
 <span>def <span class="ident">log_task</span></span>(<span>self, status: str, text: str) ‑> None</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Alias for <code><a title="rpa_logger.logger.Logger.finish_task" href="#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code>.
-This method can be used when the task to be logged was not previously
-started.</p></div>
+<div class="desc"><p>Create and finish a new task.</p>
+<p>This method can be used when the task to be logged was not previously
+started.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the finished task.</dd>
+<dt><strong><code>text</code></strong></dt>
+<dd>Name of the task.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def log_task(self, status: str, text: str) -&gt; None:
-    &#39;&#39;&#39;Alias for `rpa_logger.logger.Logger.finish_task`.
+    &#39;&#39;&#39;Create and finish a new task.
+
     This method can be used when the task to be logged was not previously
     started.
+
+    Args:
+        status: Status to use for the finished task.
+        text: Name of the task.
     &#39;&#39;&#39;
-    return self.finish_task(status, text)</code></pre>
+    key = self.suite.log_task(status, text)
+    self._print_task(key)
+    self._print_active()
+    return key</code></pre>
 </details>
 </dd>
 <dt id="rpa_logger.logger.Logger.start_task"><code class="name flex">
@@ -799,10 +1074,11 @@ will be used.</dd>
     Return:
         Key to control to the created task with.
     &#39;&#39;&#39;
-    if not key:
-        key = uuid4()
+    key = self.suite.create_task(text, key)
 
-    self._active_tasks[key] = text
+    if self._print_output_immediately:
+        self._print_task(key)
+
     self._print_active()
     return key</code></pre>
 </details>
@@ -846,7 +1122,7 @@ there are active progress indicators.</p></div>
     Returns:
         Number of failed (status is either `FAILURE` or `ERROR`) tasks.
     &#39;&#39;&#39;
-    summary = Counter(self._results)
+    summary = self.suite.task_status_counter
 
     text = self.bold(&#39;Summary:&#39;)
     for status in summary:
@@ -881,6 +1157,9 @@ there are active progress indicators.</p></div>
         title: Title to print in bold.
         description: Description to print under the title.
     &#39;&#39;&#39;
+    self.suite.name = title
+    self.suite.description = description
+
     title_text = f&#39;{self.bold(title)}\n&#39; if title else &#39;&#39;
     self._print(f&#39;{title_text}{description or &#34;&#34;}\n&#39;)</code></pre>
 </details>
@@ -915,10 +1194,14 @@ there are active progress indicators.</p></div>
 <li><code><a title="rpa_logger.logger.Logger.bold" href="#rpa_logger.logger.Logger.bold">bold</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.color" href="#rpa_logger.logger.Logger.color">color</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.error" href="#rpa_logger.logger.Logger.error">error</a></code></li>
+<li><code><a title="rpa_logger.logger.Logger.finish_suite" href="#rpa_logger.logger.Logger.finish_suite">finish_suite</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.finish_task" href="#rpa_logger.logger.Logger.finish_task">finish_task</a></code></li>
+<li><code><a title="rpa_logger.logger.Logger.log_metadata" href="#rpa_logger.logger.Logger.log_metadata">log_metadata</a></code></li>
+<li><code><a title="rpa_logger.logger.Logger.log_output" href="#rpa_logger.logger.Logger.log_output">log_output</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.log_task" href="#rpa_logger.logger.Logger.log_task">log_task</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.start_task" href="#rpa_logger.logger.Logger.start_task">start_task</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.stop_progress_animation" href="#rpa_logger.logger.Logger.stop_progress_animation">stop_progress_animation</a></code></li>
+<li><code><a title="rpa_logger.logger.Logger.suite" href="#rpa_logger.logger.Logger.suite">suite</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.summary" href="#rpa_logger.logger.Logger.summary">summary</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.title" href="#rpa_logger.logger.Logger.title">title</a></code></li>
 </ul>

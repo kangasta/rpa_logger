@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
 <title>rpa_logger.utils.args API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Helpers for adding Logger parameters to `ArgumentParser` and parsing
+`rpa_logger.logger.Logger` parameters from parsed command line arguments." />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
 <link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
@@ -22,14 +23,28 @@
 <h1 class="title">Module <code>rpa_logger.utils.args</code></h1>
 </header>
 <section id="section-intro">
+<p>Helpers for adding Logger parameters to <code>ArgumentParser</code> and parsing
+<code><a title="rpa_logger.logger.Logger" href="../logger.html#rpa_logger.logger.Logger">Logger</a></code> parameters from parsed command line arguments.</p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from argparse import ArgumentParser, Namespace
+<pre><code class="python">&#39;&#39;&#39;Helpers for adding Logger parameters to `ArgumentParser` and parsing
+`rpa_logger.logger.Logger` parameters from parsed command line arguments.
+&#39;&#39;&#39;
+from argparse import ArgumentParser, Namespace
 
 
 def get_argparser(parser: ArgumentParser = None) -&gt; ArgumentParser:
+    &#39;&#39;&#39;Get `ArgumentParser` with `rpa_logger.logger.Logger` arguments
+
+    Args:
+        parser: `ArgumentParser` to add arguments to. If None, new
+            `ArgumentParser` will be created.
+
+    Returns:
+        Created or modified `ArgumentParser`.
+    &#39;&#39;&#39;
     if not parser:
         parser = ArgumentParser()
 
@@ -47,15 +62,32 @@ def get_argparser(parser: ArgumentParser = None) -&gt; ArgumentParser:
         dest=&#39;colors&#39;,
         action=&#39;store_false&#39;,
         help=&#39;Disable colors in console output.&#39;)
+    parser.add_argument(
+        &#39;--print-output-immediately&#39;,
+        action=&#39;store_true&#39;,
+        help=(
+            &#39;Print task output immediately as it is logged instead of &#39;
+            &#39;printing it when the task is completed. If enabled, start of &#39;
+            &#39;task is also printed.&#39;))
 
     return parser
 
 
 def get_rpa_logger_parameters(args: Namespace) -&gt; dict:
+    &#39;&#39;&#39;Parse `rpa_logger.logger.Logger` parameters from parsed command line
+    arguments.
+
+    Args:
+        args: Parsed command line arguments.
+
+    Returns:
+        `dict` with `rpa_logger.logger.Logger` parameters.
+    &#39;&#39;&#39;
     return dict(
         animations=args.animation,
         colors=args.colors,
-        ascii_only=args.ascii_only
+        ascii_only=args.ascii_only,
+        print_output_immediately=args.print_output_immediately,
     )</code></pre>
 </details>
 </section>
@@ -70,12 +102,29 @@ def get_rpa_logger_parameters(args: Namespace) -&gt; dict:
 <span>def <span class="ident">get_argparser</span></span>(<span>parser: argparse.ArgumentParser = None) ‑> argparse.ArgumentParser</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Get <code>ArgumentParser</code> with <code><a title="rpa_logger.logger.Logger" href="../logger.html#rpa_logger.logger.Logger">Logger</a></code> arguments</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>parser</code></strong></dt>
+<dd><code>ArgumentParser</code> to add arguments to. If None, new
+<code>ArgumentParser</code> will be created.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>Created or modified <code>ArgumentParser</code>.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def get_argparser(parser: ArgumentParser = None) -&gt; ArgumentParser:
+    &#39;&#39;&#39;Get `ArgumentParser` with `rpa_logger.logger.Logger` arguments
+
+    Args:
+        parser: `ArgumentParser` to add arguments to. If None, new
+            `ArgumentParser` will be created.
+
+    Returns:
+        Created or modified `ArgumentParser`.
+    &#39;&#39;&#39;
     if not parser:
         parser = ArgumentParser()
 
@@ -93,6 +142,13 @@ def get_rpa_logger_parameters(args: Namespace) -&gt; dict:
         dest=&#39;colors&#39;,
         action=&#39;store_false&#39;,
         help=&#39;Disable colors in console output.&#39;)
+    parser.add_argument(
+        &#39;--print-output-immediately&#39;,
+        action=&#39;store_true&#39;,
+        help=(
+            &#39;Print task output immediately as it is logged instead of &#39;
+            &#39;printing it when the task is completed. If enabled, start of &#39;
+            &#39;task is also printed.&#39;))
 
     return parser</code></pre>
 </details>
@@ -101,16 +157,34 @@ def get_rpa_logger_parameters(args: Namespace) -&gt; dict:
 <span>def <span class="ident">get_rpa_logger_parameters</span></span>(<span>args: argparse.Namespace) ‑> dict</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Parse <code><a title="rpa_logger.logger.Logger" href="../logger.html#rpa_logger.logger.Logger">Logger</a></code> parameters from parsed command line
+arguments.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>args</code></strong></dt>
+<dd>Parsed command line arguments.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p><code>dict</code> with <code><a title="rpa_logger.logger.Logger" href="../logger.html#rpa_logger.logger.Logger">Logger</a></code> parameters.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def get_rpa_logger_parameters(args: Namespace) -&gt; dict:
+    &#39;&#39;&#39;Parse `rpa_logger.logger.Logger` parameters from parsed command line
+    arguments.
+
+    Args:
+        args: Parsed command line arguments.
+
+    Returns:
+        `dict` with `rpa_logger.logger.Logger` parameters.
+    &#39;&#39;&#39;
     return dict(
         animations=args.animation,
         colors=args.colors,
-        ascii_only=args.ascii_only
+        ascii_only=args.ascii_only,
+        print_output_immediately=args.print_output_immediately,
     )</code></pre>
 </details>
 </dd>

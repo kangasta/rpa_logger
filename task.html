@@ -29,6 +29,13 @@
 </summary>
 <pre><code class="python">&#39;&#39;&#39;Constants and helpers for describing RPA tasks and their status.
 &#39;&#39;&#39;
+from collections import Counter
+from dataclasses import dataclass
+from typing import Any, Dict, Hashable, List, Union
+from uuid import uuid4
+
+from .utils import timestamp
+from .utils.output import OutputText
 
 STARTED = &#39;STARTED&#39;
 SUCCESS = &#39;SUCCESS&#39;
@@ -37,7 +44,229 @@ FAILURE = &#39;FAILURE&#39;
 ERROR = &#39;ERROR&#39;
 SKIPPED = &#39;SKIPPED&#39;
 
-STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)</code></pre>
+STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)
+
+
+@dataclass
+class BaseTask:
+    &#39;&#39;&#39;Base class to define common functionality of `rpa_logger.task.Task` and
+    `rpa_logger.task.TaskSuite`
+    &#39;&#39;&#39;
+    type: str
+    &#39;&#39;&#39;Used to identify task type, when task is presented as dict&#39;&#39;&#39;
+    name: Union[str, None]
+    &#39;&#39;&#39;Human-readable name of the task.&#39;&#39;&#39;
+    status: str
+    &#39;&#39;&#39;Describes state of the task. For example `SUCCESS` or `ERROR`.&#39;&#39;&#39;
+    started: str
+    &#39;&#39;&#39;UTC ISO-8601 timestamp that stores the start time of the task.
+    Defined automatically when instance is created.
+    &#39;&#39;&#39;
+    finished: Union[str, None]
+    &#39;&#39;&#39;UTC ISO-8601 timestamp that stores the finish time of the task.
+    Defined automatically when `rpa_logger.task.BaseTask.finish` method is
+    called.
+    &#39;&#39;&#39;
+    metadata: Dict[str, Any]
+    &#39;&#39;&#39;Container for any other data stored in the task. Could, for example,
+    contain information about the execution environment or data that was
+    processed in the task.
+    &#39;&#39;&#39;
+
+    def __init__(self, name: Union[str, None], status: str = STARTED) -&gt; None:
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task.
+            status: Status to use for the started task.
+        &#39;&#39;&#39;
+        self.status = status
+        self.name = name
+        self.started = timestamp()
+        self.finished = None
+        self.metadata = dict()
+
+    def finish(self, status) -&gt; None:
+        &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+        Args:
+            status: Status to use for the finished task.
+        &#39;&#39;&#39;
+        self.status = status
+        self.finished = timestamp()
+
+    def log_metadata(self, key: str, value: Any) -&gt; None:
+        &#39;&#39;&#39;Log metadata for the task.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+        &#39;&#39;&#39;
+        self.metadata[key] = value
+
+
+@dataclass
+class Task(BaseTask):
+    &#39;&#39;&#39;Defines single task and stores its output and metadata
+    &#39;&#39;&#39;
+    output: List[OutputText]
+
+    def __init__(self, name: str, status: str = STARTED):
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task.
+            status: Status to use for the started task.
+        &#39;&#39;&#39;
+        super().__init__(name, status)
+        self.output = list()
+
+    @property
+    def type(self):
+        return &#39;TASK&#39;
+
+    def log_output(self, text: str, stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        self.output.append(OutputText(text, stream))
+
+
+@dataclass
+class TaskSuite(BaseTask):
+    &#39;&#39;&#39;Defines task suite and stores its tasks and metadata
+    &#39;&#39;&#39;
+    description: Union[str, None]
+    tasks: List[Task]
+
+    def __init__(
+            self,
+            name: Union[str, None],
+            description: str = None,
+            status: str = STARTED):
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task suite.
+            description: Description of the task suite.
+            status: Status to use for the started task suite.
+        &#39;&#39;&#39;
+        super().__init__(name, status)
+        self.description = description
+        self._tasks: Dict[Hashable, Task] = dict()
+
+    @property
+    def type(self):
+        return &#39;SUITE&#39;
+
+    @property
+    def tasks(self) -&gt; List[Task]:  # pylint: disable=function-redefined
+        &#39;&#39;&#39;Return suites tasks as list sorted by the started time.
+        &#39;&#39;&#39;
+        tasks = list(self._tasks.values())
+        tasks.sort(key=lambda i: i.started)
+        return tasks
+
+    @property
+    def active_tasks(self) -&gt; List[Task]:
+        &#39;&#39;&#39;Return suites active tasks as list sorted by the started time.
+
+        Task is active until it is finished; Task is active, if its finished
+        variable is None.
+        &#39;&#39;&#39;
+        return [i for i in self.tasks if i.finished is None]
+
+    @property
+    def task_status_counter(self) -&gt; Counter:
+        &#39;&#39;&#39;Return `Counter` instance initialized with suites task statuses.
+        &#39;&#39;&#39;
+        return Counter(i.status for i in self._tasks.values())
+
+    def create_task(
+            self,
+            name: str,
+            key: Hashable = None,
+            status: str = STARTED):
+        &#39;&#39;&#39;Create new task and store it in the suite tasks.
+
+        Args:
+            name: Name of the task.
+            key: Key to identify the created task with.
+            status: Status to use for the started task.
+
+        Returns:
+            Key of the created task.
+        &#39;&#39;&#39;
+        if not key:
+            key = uuid4()
+
+        self._tasks[key] = Task(name, status)
+        return key
+
+    def log_task(self, status: str, name: str) -&gt; None:
+        &#39;&#39;&#39;Create and finish a new task.
+
+        Args:
+            name: Name of the task.
+            status: Status to use for the finished task.
+
+        Returns:
+            Key of the created task.
+        &#39;&#39;&#39;
+        key = self.create_task(name)
+        self.finish_task(key, status)
+        return key
+
+    def finish_task(self, key: Hashable, status: str) -&gt; None:
+        &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+        Args:
+            key: Key of the task to finish
+            status: Status to use for the finished task.
+        &#39;&#39;&#39;
+        return self._tasks[key].finish(status)
+
+    def get_task(self, key: Hashable) -&gt; Task:
+        &#39;&#39;&#39;Get `rpa_logger.task.Task` with given key.
+
+        Args:
+            key: Key to try to find from suite.
+
+        Returns:
+            Task with matching key.
+        &#39;&#39;&#39;
+        return self._tasks.get(key)
+
+    def log_metadata(
+            self,
+            key: str,
+            value: Any,
+            task_key: Hashable = None) -&gt; None:
+        &#39;&#39;&#39;Log metadata into the task suite or any of its tasks.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+            task_key: Key of a task to log metadata into. If None, metadata
+                is logged to the suite.
+        &#39;&#39;&#39;
+        if task_key:
+            self._tasks[task_key].log_metadata(key, value)
+
+        super().log_metadata(key, value)
+
+    def log_output(self, key: Hashable, text: str,
+                   stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            key: Key of the task to log output to.
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        self._tasks[key].log_output(text, stream)</code></pre>
 </details>
 </section>
 <section>
@@ -47,6 +276,708 @@ STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)</code></pre>
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="rpa_logger.task.BaseTask"><code class="flex name class">
+<span>class <span class="ident">BaseTask</span></span>
+<span>(</span><span>name: Optional[str], status: str = 'STARTED')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Base class to define common functionality of <code><a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a></code> and
+<code><a title="rpa_logger.task.TaskSuite" href="#rpa_logger.task.TaskSuite">TaskSuite</a></code></p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>name</code></strong></dt>
+<dd>Name of the task.</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the started task.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class BaseTask:
+    &#39;&#39;&#39;Base class to define common functionality of `rpa_logger.task.Task` and
+    `rpa_logger.task.TaskSuite`
+    &#39;&#39;&#39;
+    type: str
+    &#39;&#39;&#39;Used to identify task type, when task is presented as dict&#39;&#39;&#39;
+    name: Union[str, None]
+    &#39;&#39;&#39;Human-readable name of the task.&#39;&#39;&#39;
+    status: str
+    &#39;&#39;&#39;Describes state of the task. For example `SUCCESS` or `ERROR`.&#39;&#39;&#39;
+    started: str
+    &#39;&#39;&#39;UTC ISO-8601 timestamp that stores the start time of the task.
+    Defined automatically when instance is created.
+    &#39;&#39;&#39;
+    finished: Union[str, None]
+    &#39;&#39;&#39;UTC ISO-8601 timestamp that stores the finish time of the task.
+    Defined automatically when `rpa_logger.task.BaseTask.finish` method is
+    called.
+    &#39;&#39;&#39;
+    metadata: Dict[str, Any]
+    &#39;&#39;&#39;Container for any other data stored in the task. Could, for example,
+    contain information about the execution environment or data that was
+    processed in the task.
+    &#39;&#39;&#39;
+
+    def __init__(self, name: Union[str, None], status: str = STARTED) -&gt; None:
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task.
+            status: Status to use for the started task.
+        &#39;&#39;&#39;
+        self.status = status
+        self.name = name
+        self.started = timestamp()
+        self.finished = None
+        self.metadata = dict()
+
+    def finish(self, status) -&gt; None:
+        &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+        Args:
+            status: Status to use for the finished task.
+        &#39;&#39;&#39;
+        self.status = status
+        self.finished = timestamp()
+
+    def log_metadata(self, key: str, value: Any) -&gt; None:
+        &#39;&#39;&#39;Log metadata for the task.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+        &#39;&#39;&#39;
+        self.metadata[key] = value</code></pre>
+</details>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a></li>
+<li><a title="rpa_logger.task.TaskSuite" href="#rpa_logger.task.TaskSuite">TaskSuite</a></li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="rpa_logger.task.BaseTask.finished"><code class="name">var <span class="ident">finished</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"><p>UTC ISO-8601 timestamp that stores the finish time of the task.
+Defined automatically when <code><a title="rpa_logger.task.BaseTask.finish" href="#rpa_logger.task.BaseTask.finish">BaseTask.finish()</a></code> method is
+called.</p></div>
+</dd>
+<dt id="rpa_logger.task.BaseTask.metadata"><code class="name">var <span class="ident">metadata</span> : Dict[str, Any]</code></dt>
+<dd>
+<div class="desc"><p>Container for any other data stored in the task. Could, for example,
+contain information about the execution environment or data that was
+processed in the task.</p></div>
+</dd>
+<dt id="rpa_logger.task.BaseTask.name"><code class="name">var <span class="ident">name</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"><p>Human-readable name of the task.</p></div>
+</dd>
+<dt id="rpa_logger.task.BaseTask.started"><code class="name">var <span class="ident">started</span> : str</code></dt>
+<dd>
+<div class="desc"><p>UTC ISO-8601 timestamp that stores the start time of the task.
+Defined automatically when instance is created.</p></div>
+</dd>
+<dt id="rpa_logger.task.BaseTask.status"><code class="name">var <span class="ident">status</span> : str</code></dt>
+<dd>
+<div class="desc"><p>Describes state of the task. For example <code>SUCCESS</code> or <code>ERROR</code>.</p></div>
+</dd>
+<dt id="rpa_logger.task.BaseTask.type"><code class="name">var <span class="ident">type</span> : str</code></dt>
+<dd>
+<div class="desc"><p>Used to identify task type, when task is presented as dict</p></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="rpa_logger.task.BaseTask.finish"><code class="name flex">
+<span>def <span class="ident">finish</span></span>(<span>self, status) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set finished timestamp and end status of the task</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the finished task.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def finish(self, status) -&gt; None:
+    &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+    Args:
+        status: Status to use for the finished task.
+    &#39;&#39;&#39;
+    self.status = status
+    self.finished = timestamp()</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.BaseTask.log_metadata"><code class="name flex">
+<span>def <span class="ident">log_metadata</span></span>(<span>self, key: str, value: Any) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Log metadata for the task.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key for the metadata item.</dd>
+<dt><strong><code>value</code></strong></dt>
+<dd>Value for the metadata item. If task data is saved as json
+or yaml, this value must be serializable.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_metadata(self, key: str, value: Any) -&gt; None:
+    &#39;&#39;&#39;Log metadata for the task.
+
+    Args:
+        key: Key for the metadata item.
+        value: Value for the metadata item. If task data is saved as json
+            or yaml, this value must be serializable.
+    &#39;&#39;&#39;
+    self.metadata[key] = value</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="rpa_logger.task.Task"><code class="flex name class">
+<span>class <span class="ident">Task</span></span>
+<span>(</span><span>name: str, status: str = 'STARTED')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Defines single task and stores its output and metadata</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>name</code></strong></dt>
+<dd>Name of the task.</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the started task.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Task(BaseTask):
+    &#39;&#39;&#39;Defines single task and stores its output and metadata
+    &#39;&#39;&#39;
+    output: List[OutputText]
+
+    def __init__(self, name: str, status: str = STARTED):
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task.
+            status: Status to use for the started task.
+        &#39;&#39;&#39;
+        super().__init__(name, status)
+        self.output = list()
+
+    @property
+    def type(self):
+        return &#39;TASK&#39;
+
+    def log_output(self, text: str, stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        self.output.append(OutputText(text, stream))</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="rpa_logger.task.BaseTask" href="#rpa_logger.task.BaseTask">BaseTask</a></li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="rpa_logger.task.Task.output"><code class="name">var <span class="ident">output</span> : List[<a title="rpa_logger.utils.output.OutputText" href="utils/output.html#rpa_logger.utils.output.OutputText">OutputText</a>]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="rpa_logger.task.Task.log_output"><code class="name flex">
+<span>def <span class="ident">log_output</span></span>(<span>self, text: str, stream: str = 'stdout') ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Append new <code><a title="rpa_logger.utils.output.OutputText" href="utils/output.html#rpa_logger.utils.output.OutputText">OutputText</a></code> to task output.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>text</code></strong></dt>
+<dd>Output text content.</dd>
+<dt><strong><code>stream</code></strong></dt>
+<dd>Output stream. Defaults to <code>stdout</code>.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_output(self, text: str, stream: str = &#39;stdout&#39;) -&gt; None:
+    &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+    Args:
+        text: Output text content.
+        stream: Output stream. Defaults to `stdout`.
+    &#39;&#39;&#39;
+    self.output.append(OutputText(text, stream))</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="rpa_logger.task.BaseTask" href="#rpa_logger.task.BaseTask">BaseTask</a></b></code>:
+<ul class="hlist">
+<li><code><a title="rpa_logger.task.BaseTask.finish" href="#rpa_logger.task.BaseTask.finish">finish</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.finished" href="#rpa_logger.task.BaseTask.finished">finished</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.log_metadata" href="#rpa_logger.task.BaseTask.log_metadata">log_metadata</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.metadata" href="#rpa_logger.task.BaseTask.metadata">metadata</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.name" href="#rpa_logger.task.BaseTask.name">name</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.started" href="#rpa_logger.task.BaseTask.started">started</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.status" href="#rpa_logger.task.BaseTask.status">status</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.type" href="#rpa_logger.task.BaseTask.type">type</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+<dt id="rpa_logger.task.TaskSuite"><code class="flex name class">
+<span>class <span class="ident">TaskSuite</span></span>
+<span>(</span><span>name: Optional[str], description: str = None, status: str = 'STARTED')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Defines task suite and stores its tasks and metadata</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>name</code></strong></dt>
+<dd>Name of the task suite.</dd>
+<dt><strong><code>description</code></strong></dt>
+<dd>Description of the task suite.</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the started task suite.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class TaskSuite(BaseTask):
+    &#39;&#39;&#39;Defines task suite and stores its tasks and metadata
+    &#39;&#39;&#39;
+    description: Union[str, None]
+    tasks: List[Task]
+
+    def __init__(
+            self,
+            name: Union[str, None],
+            description: str = None,
+            status: str = STARTED):
+        &#39;&#39;&#39;
+        Args:
+            name: Name of the task suite.
+            description: Description of the task suite.
+            status: Status to use for the started task suite.
+        &#39;&#39;&#39;
+        super().__init__(name, status)
+        self.description = description
+        self._tasks: Dict[Hashable, Task] = dict()
+
+    @property
+    def type(self):
+        return &#39;SUITE&#39;
+
+    @property
+    def tasks(self) -&gt; List[Task]:  # pylint: disable=function-redefined
+        &#39;&#39;&#39;Return suites tasks as list sorted by the started time.
+        &#39;&#39;&#39;
+        tasks = list(self._tasks.values())
+        tasks.sort(key=lambda i: i.started)
+        return tasks
+
+    @property
+    def active_tasks(self) -&gt; List[Task]:
+        &#39;&#39;&#39;Return suites active tasks as list sorted by the started time.
+
+        Task is active until it is finished; Task is active, if its finished
+        variable is None.
+        &#39;&#39;&#39;
+        return [i for i in self.tasks if i.finished is None]
+
+    @property
+    def task_status_counter(self) -&gt; Counter:
+        &#39;&#39;&#39;Return `Counter` instance initialized with suites task statuses.
+        &#39;&#39;&#39;
+        return Counter(i.status for i in self._tasks.values())
+
+    def create_task(
+            self,
+            name: str,
+            key: Hashable = None,
+            status: str = STARTED):
+        &#39;&#39;&#39;Create new task and store it in the suite tasks.
+
+        Args:
+            name: Name of the task.
+            key: Key to identify the created task with.
+            status: Status to use for the started task.
+
+        Returns:
+            Key of the created task.
+        &#39;&#39;&#39;
+        if not key:
+            key = uuid4()
+
+        self._tasks[key] = Task(name, status)
+        return key
+
+    def log_task(self, status: str, name: str) -&gt; None:
+        &#39;&#39;&#39;Create and finish a new task.
+
+        Args:
+            name: Name of the task.
+            status: Status to use for the finished task.
+
+        Returns:
+            Key of the created task.
+        &#39;&#39;&#39;
+        key = self.create_task(name)
+        self.finish_task(key, status)
+        return key
+
+    def finish_task(self, key: Hashable, status: str) -&gt; None:
+        &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+        Args:
+            key: Key of the task to finish
+            status: Status to use for the finished task.
+        &#39;&#39;&#39;
+        return self._tasks[key].finish(status)
+
+    def get_task(self, key: Hashable) -&gt; Task:
+        &#39;&#39;&#39;Get `rpa_logger.task.Task` with given key.
+
+        Args:
+            key: Key to try to find from suite.
+
+        Returns:
+            Task with matching key.
+        &#39;&#39;&#39;
+        return self._tasks.get(key)
+
+    def log_metadata(
+            self,
+            key: str,
+            value: Any,
+            task_key: Hashable = None) -&gt; None:
+        &#39;&#39;&#39;Log metadata into the task suite or any of its tasks.
+
+        Args:
+            key: Key for the metadata item.
+            value: Value for the metadata item. If task data is saved as json
+                or yaml, this value must be serializable.
+            task_key: Key of a task to log metadata into. If None, metadata
+                is logged to the suite.
+        &#39;&#39;&#39;
+        if task_key:
+            self._tasks[task_key].log_metadata(key, value)
+
+        super().log_metadata(key, value)
+
+    def log_output(self, key: Hashable, text: str,
+                   stream: str = &#39;stdout&#39;) -&gt; None:
+        &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+        Args:
+            key: Key of the task to log output to.
+            text: Output text content.
+            stream: Output stream. Defaults to `stdout`.
+        &#39;&#39;&#39;
+        self._tasks[key].log_output(text, stream)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="rpa_logger.task.BaseTask" href="#rpa_logger.task.BaseTask">BaseTask</a></li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="rpa_logger.task.TaskSuite.description"><code class="name">var <span class="ident">description</span> : Optional[str]</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Instance variables</h3>
+<dl>
+<dt id="rpa_logger.task.TaskSuite.active_tasks"><code class="name">var <span class="ident">active_tasks</span> : List[<a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a>]</code></dt>
+<dd>
+<div class="desc"><p>Return suites active tasks as list sorted by the started time.</p>
+<p>Task is active until it is finished; Task is active, if its finished
+variable is None.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def active_tasks(self) -&gt; List[Task]:
+    &#39;&#39;&#39;Return suites active tasks as list sorted by the started time.
+
+    Task is active until it is finished; Task is active, if its finished
+    variable is None.
+    &#39;&#39;&#39;
+    return [i for i in self.tasks if i.finished is None]</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.task_status_counter"><code class="name">var <span class="ident">task_status_counter</span> : collections.Counter</code></dt>
+<dd>
+<div class="desc"><p>Return <code>Counter</code> instance initialized with suites task statuses.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def task_status_counter(self) -&gt; Counter:
+    &#39;&#39;&#39;Return `Counter` instance initialized with suites task statuses.
+    &#39;&#39;&#39;
+    return Counter(i.status for i in self._tasks.values())</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.tasks"><code class="name">var <span class="ident">tasks</span> : List[<a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a>]</code></dt>
+<dd>
+<div class="desc"><p>Return suites tasks as list sorted by the started time.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@property
+def tasks(self) -&gt; List[Task]:  # pylint: disable=function-redefined
+    &#39;&#39;&#39;Return suites tasks as list sorted by the started time.
+    &#39;&#39;&#39;
+    tasks = list(self._tasks.values())
+    tasks.sort(key=lambda i: i.started)
+    return tasks</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="rpa_logger.task.TaskSuite.create_task"><code class="name flex">
+<span>def <span class="ident">create_task</span></span>(<span>self, name: str, key: Hashable[] = None, status: str = 'STARTED')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Create new task and store it in the suite tasks.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>name</code></strong></dt>
+<dd>Name of the task.</dd>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key to identify the created task with.</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the started task.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>Key of the created task.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_task(
+        self,
+        name: str,
+        key: Hashable = None,
+        status: str = STARTED):
+    &#39;&#39;&#39;Create new task and store it in the suite tasks.
+
+    Args:
+        name: Name of the task.
+        key: Key to identify the created task with.
+        status: Status to use for the started task.
+
+    Returns:
+        Key of the created task.
+    &#39;&#39;&#39;
+    if not key:
+        key = uuid4()
+
+    self._tasks[key] = Task(name, status)
+    return key</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.finish_task"><code class="name flex">
+<span>def <span class="ident">finish_task</span></span>(<span>self, key: Hashable[], status: str) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set finished timestamp and end status of the task</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key of the task to finish</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the finished task.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def finish_task(self, key: Hashable, status: str) -&gt; None:
+    &#39;&#39;&#39;Set finished timestamp and end status of the task
+
+    Args:
+        key: Key of the task to finish
+        status: Status to use for the finished task.
+    &#39;&#39;&#39;
+    return self._tasks[key].finish(status)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.get_task"><code class="name flex">
+<span>def <span class="ident">get_task</span></span>(<span>self, key: Hashable[]) ‑> <a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Get <code><a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a></code> with given key.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key to try to find from suite.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>Task with matching key.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_task(self, key: Hashable) -&gt; Task:
+    &#39;&#39;&#39;Get `rpa_logger.task.Task` with given key.
+
+    Args:
+        key: Key to try to find from suite.
+
+    Returns:
+        Task with matching key.
+    &#39;&#39;&#39;
+    return self._tasks.get(key)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.log_metadata"><code class="name flex">
+<span>def <span class="ident">log_metadata</span></span>(<span>self, key: str, value: Any, task_key: Hashable[] = None) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Log metadata into the task suite or any of its tasks.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key for the metadata item.</dd>
+<dt><strong><code>value</code></strong></dt>
+<dd>Value for the metadata item. If task data is saved as json
+or yaml, this value must be serializable.</dd>
+<dt><strong><code>task_key</code></strong></dt>
+<dd>Key of a task to log metadata into. If None, metadata
+is logged to the suite.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_metadata(
+        self,
+        key: str,
+        value: Any,
+        task_key: Hashable = None) -&gt; None:
+    &#39;&#39;&#39;Log metadata into the task suite or any of its tasks.
+
+    Args:
+        key: Key for the metadata item.
+        value: Value for the metadata item. If task data is saved as json
+            or yaml, this value must be serializable.
+        task_key: Key of a task to log metadata into. If None, metadata
+            is logged to the suite.
+    &#39;&#39;&#39;
+    if task_key:
+        self._tasks[task_key].log_metadata(key, value)
+
+    super().log_metadata(key, value)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.log_output"><code class="name flex">
+<span>def <span class="ident">log_output</span></span>(<span>self, key: Hashable[], text: str, stream: str = 'stdout') ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Append new <code><a title="rpa_logger.utils.output.OutputText" href="utils/output.html#rpa_logger.utils.output.OutputText">OutputText</a></code> to task output.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>key</code></strong></dt>
+<dd>Key of the task to log output to.</dd>
+<dt><strong><code>text</code></strong></dt>
+<dd>Output text content.</dd>
+<dt><strong><code>stream</code></strong></dt>
+<dd>Output stream. Defaults to <code>stdout</code>.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_output(self, key: Hashable, text: str,
+               stream: str = &#39;stdout&#39;) -&gt; None:
+    &#39;&#39;&#39;Append new `rpa_logger.utils.output.OutputText` to task output.
+
+    Args:
+        key: Key of the task to log output to.
+        text: Output text content.
+        stream: Output stream. Defaults to `stdout`.
+    &#39;&#39;&#39;
+    self._tasks[key].log_output(text, stream)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.task.TaskSuite.log_task"><code class="name flex">
+<span>def <span class="ident">log_task</span></span>(<span>self, status: str, name: str) ‑> None</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Create and finish a new task.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>name</code></strong></dt>
+<dd>Name of the task.</dd>
+<dt><strong><code>status</code></strong></dt>
+<dd>Status to use for the finished task.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>Key of the created task.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_task(self, status: str, name: str) -&gt; None:
+    &#39;&#39;&#39;Create and finish a new task.
+
+    Args:
+        name: Name of the task.
+        status: Status to use for the finished task.
+
+    Returns:
+        Key of the created task.
+    &#39;&#39;&#39;
+    key = self.create_task(name)
+    self.finish_task(key, status)
+    return key</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="rpa_logger.task.BaseTask" href="#rpa_logger.task.BaseTask">BaseTask</a></b></code>:
+<ul class="hlist">
+<li><code><a title="rpa_logger.task.BaseTask.finish" href="#rpa_logger.task.BaseTask.finish">finish</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.finished" href="#rpa_logger.task.BaseTask.finished">finished</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.metadata" href="#rpa_logger.task.BaseTask.metadata">metadata</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.name" href="#rpa_logger.task.BaseTask.name">name</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.started" href="#rpa_logger.task.BaseTask.started">started</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.status" href="#rpa_logger.task.BaseTask.status">status</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.type" href="#rpa_logger.task.BaseTask.type">type</a></code></li>
+</ul>
+</li>
+</ul>
+</dd>
+</dl>
 </section>
 </article>
 <nav id="sidebar">
@@ -58,6 +989,45 @@ STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)</code></pre>
 <li><h3>Super-module</h3>
 <ul>
 <li><code><a title="rpa_logger" href="index.html">rpa_logger</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="rpa_logger.task.BaseTask" href="#rpa_logger.task.BaseTask">BaseTask</a></code></h4>
+<ul class="two-column">
+<li><code><a title="rpa_logger.task.BaseTask.finish" href="#rpa_logger.task.BaseTask.finish">finish</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.finished" href="#rpa_logger.task.BaseTask.finished">finished</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.log_metadata" href="#rpa_logger.task.BaseTask.log_metadata">log_metadata</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.metadata" href="#rpa_logger.task.BaseTask.metadata">metadata</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.name" href="#rpa_logger.task.BaseTask.name">name</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.started" href="#rpa_logger.task.BaseTask.started">started</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.status" href="#rpa_logger.task.BaseTask.status">status</a></code></li>
+<li><code><a title="rpa_logger.task.BaseTask.type" href="#rpa_logger.task.BaseTask.type">type</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rpa_logger.task.Task" href="#rpa_logger.task.Task">Task</a></code></h4>
+<ul class="">
+<li><code><a title="rpa_logger.task.Task.log_output" href="#rpa_logger.task.Task.log_output">log_output</a></code></li>
+<li><code><a title="rpa_logger.task.Task.output" href="#rpa_logger.task.Task.output">output</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rpa_logger.task.TaskSuite" href="#rpa_logger.task.TaskSuite">TaskSuite</a></code></h4>
+<ul class="two-column">
+<li><code><a title="rpa_logger.task.TaskSuite.active_tasks" href="#rpa_logger.task.TaskSuite.active_tasks">active_tasks</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.create_task" href="#rpa_logger.task.TaskSuite.create_task">create_task</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.description" href="#rpa_logger.task.TaskSuite.description">description</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.finish_task" href="#rpa_logger.task.TaskSuite.finish_task">finish_task</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.get_task" href="#rpa_logger.task.TaskSuite.get_task">get_task</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.log_metadata" href="#rpa_logger.task.TaskSuite.log_metadata">log_metadata</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.log_output" href="#rpa_logger.task.TaskSuite.log_output">log_output</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.log_task" href="#rpa_logger.task.TaskSuite.log_task">log_task</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.task_status_counter" href="#rpa_logger.task.TaskSuite.task_status_counter">task_status_counter</a></code></li>
+<li><code><a title="rpa_logger.task.TaskSuite.tasks" href="#rpa_logger.task.TaskSuite.tasks">tasks</a></code></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
