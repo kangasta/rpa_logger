@@ -10,7 +10,12 @@ from threading import Event, Thread
 from typing import Callable, Hashable, Tuple, TextIO
 
 from .task import *
-from .utils.terminal import clear_current_row, print_spinner_and_text, COLORS
+from .utils.terminal import (
+    bold,
+    clear_current_row,
+    color,
+    print_spinner_and_text,
+    remove_ansi_escapes)
 
 
 def get_indicator(status: str, ascii_only: bool = False) -> Tuple[str, str]:
@@ -127,34 +132,19 @@ class Logger:
         '''`rpa_logger.task.TaskSuite` where logger stores task data.'''
 
     def bold(self, text: str) -> str:
-        '''Bold given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-
-        Returns:
-            String with formatted text.
+        '''Shortcut for `rpa_logger.utils.terminal.bold`.
         '''
-        if not self.options.colors:
-            return text
-        return f'\033[1m{text}\033[22m'
+        return bold(text)
 
-    def color(self, text: str, color: str) -> str:
-        '''Color given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-            color: Color to format text with. See
-                `rpa_logger.utils.terminal.COLORS` for available values.
-
-        Returns:
-            String with formatted text.
+    def color(self, text: str, color_name: str) -> str:
+        '''Shortcut for `rpa_logger.utils.terminal.color`.
         '''
-        if not self.options.colors or color not in COLORS:
-            return text
-        return f'\033[{COLORS[color]}m{text}\033[39m'
+        return color(text, color_name)
 
     def _print(self, *args, **kwargs):
+        if not self.options.colors:
+            objs = (remove_ansi_escapes(str(arg)) for arg in args)
+            return print(*objs, file=self.options.target, **kwargs)
         return print(*args, file=self.options.target, **kwargs)
 
     def error(self, text: str) -> None:
