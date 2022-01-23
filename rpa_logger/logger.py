@@ -52,6 +52,19 @@ def multiple_active_text(num_active: int) -> str:
     return f'{num_active} tasks in progress'
 
 
+def is_status_ok(status: str) -> bool:
+    '''Default value for `status_ok_fn` parameter of
+    `rpa_logger.logger.Logger`.
+
+    Args:
+        status: Status to determine OK status for.
+
+    Returns:
+        True if given status is OK, False otherwise.
+    '''
+    return status not in (FAILURE, ERROR,)
+
+
 class Logger:
     '''Interface for logging RPA tasks.
 
@@ -66,6 +79,8 @@ class Logger:
         indicator_fn: Function used to determine the color and character for
             the status indicator. Defaults to
             `rpa_logger.logger.get_indicator`.
+        status_ok_fn: Function used to determine if given task status is ok.
+            Defaults to `rpa_logger.logger.get_indicator`.
     '''
 
     def __init__(
@@ -76,7 +91,8 @@ class Logger:
             print_output_immediately: bool = False,
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
-            indicator_fn: Callable[[str, bool], Tuple[str, str]] = None):
+            indicator_fn: Callable[[str, bool], Tuple[str, str]] = None,
+            status_ok_fn: Callable[[str], bool] = None):
         self._animations = animations
         self._colors = colors
         self._ascii_only = ascii_only
@@ -85,6 +101,7 @@ class Logger:
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
+        self._is_status_ok = status_ok_fn or is_status_ok
 
         self._spinner_thread = None
         self._spinner_stop_event = Event()
@@ -301,16 +318,25 @@ class Logger:
 
         self.suite.log_output(key, text, stream)
 
-    def finish_suite(self) -> None:
-        '''Finish loggers task suite
-        '''
+    def _num_failed_tasks(self) -> int:
         summary = self.suite.task_status_counter
-        if summary.get(FAILURE, 0) + summary.get(ERROR, 0) > 0:
-            status = SUCCESS
-        else:
-            status = ERROR
+        return sum(summary.get(status, 0)
+                   for status in summary if not self._is_status_ok(status))
 
-        return self.suite.finish(status)
+    def finish_suite(self, success_status: str = SUCCESS,
+                     failure_status: str = ERROR) -> None:
+        '''Finish loggers task suite.
+
+        Args:
+            success_status: Status to use as suite status if all tasks have
+                ok status.
+            failure_status: Status to use as suite status if some of the tasks
+                have non-ok status.
+        '''
+        if self._num_failed_tasks() > 0:
+            return self.suite.finish(failure_status)
+
+        return self.suite.finish(success_status)
 
     def summary(self) -> int:
         '''Print summary of the logged tasks.
@@ -327,4 +353,4 @@ class Logger:
 
         self._print(text)
 
-        return summary.get(FAILURE, 0) + summary.get(ERROR, 0)
+        return self._num_failed_tasks()
