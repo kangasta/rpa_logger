@@ -15,3 +15,4 @@ l.log_output(key, 'Output can be logged to tasks.')
 sleep(1)
 
 l.finish_task('SUCCESS', key=key)
+l.finish_suite()

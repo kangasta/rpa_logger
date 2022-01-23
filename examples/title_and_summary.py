@@ -8,6 +8,8 @@ l.title(
 for status in ['SUCCESS', 'IGNORED', 'FAILURE', 'ERROR', 'SKIPPED', 'UNKNOWN']:
     l.log_task(status, f'Demonstrate {status.lower()} status')
 
+l.finish_suite()
+
 # Summary returns number of non-ok tasks. Use that as exit code.
 code = l.summary()
 exit(code)

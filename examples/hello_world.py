@@ -9,3 +9,4 @@ key = l.start_task('Hello world!')
 sleep(2)
 
 l.finish_task('SUCCESS', key=key)
+l.finish_suite()
