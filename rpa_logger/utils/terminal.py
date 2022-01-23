@@ -14,6 +14,48 @@ FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 
 COLORS = dict(red=31, green=32, yellow=33, blue=34, magenta=35, grey=90)
+'''Dictionary of supported color values for `rpa_logger.utils.terminal.color`.
+'''
+
+
+def bold(text: str) -> str:
+    '''Bold given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+
+    Returns:
+        String with formatted text.
+    '''
+    return f'\033[1m{text}\033[22m'
+
+
+def color(text: str, color_name: str) -> str:
+    '''Color given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+        color_name: Color to format text with. See
+            `rpa_logger.utils.terminal.COLORS` for available values.
+
+    Returns:
+        String with formatted text.
+    '''
+    if color_name not in COLORS:
+        return text
+    return f'\033[{COLORS[color_name]}m{text}\033[39m'
+
+
+def remove_ansi_escapes(text: str) -> str:
+    '''Remove ANSI escape codes from given string.
+
+    Args:
+        text: String with ANSI escape codes.
+
+    Returns:
+        `text` without any ANSI escape codes.
+    '''
+    return re.sub(r'\033\[[^m]+m', '', text)
 
 
 def fit_to_width(text: str) -> str:
@@ -30,7 +72,7 @@ def fit_to_width(text: str) -> str:
         The possibly truncated string
     '''
     max_len = get_terminal_size().columns
-    non_formatted_text = re.sub(r'\033\[[0-9]+m', '', text.replace('\r', ''))
+    non_formatted_text = remove_ansi_escapes(text.replace('\r', ''))
 
     if len(non_formatted_text) <= max_len:
         return text
