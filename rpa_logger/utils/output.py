@@ -1,4 +1,4 @@
-'''Utilities for working with task output
+'''Utilities for working with task output.
 '''
 
 from dataclasses import dataclass

@@ -1,3 +1,5 @@
+'''Utilities for printing output to the terminal.
+'''
 import re
 from shutil import get_terminal_size
 from sys import stdout
