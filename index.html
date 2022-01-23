@@ -40,11 +40,13 @@ key = l.start_task('Hello world!')
 sleep(2)
 
 l.finish_task('SUCCESS', key=key)
+l.finish_suite()
 </code></pre>
 <p>When finishing the task, task must be assigned an status. The status can be any string. The status is used to determine the status indicator for the task, for example <code>✓</code> or <code>✗</code>. This is done, by default, by the <code><a title="rpa_logger.logger.get_indicator" href="logger.html#rpa_logger.logger.get_indicator">get_indicator()</a></code> function.</p>
 <p>For short tasks, <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code> can be omitted. In this case task description should be given as parameter to the <code><a title="rpa_logger.logger.Logger.finish_task" href="logger.html#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code> method. Alternatively, <code><a title="rpa_logger.logger.Logger.log_task" href="logger.html#rpa_logger.logger.Logger.log_task">Logger.log_task()</a></code>, an alias for finish_task, can be used in this case.</p>
 <p>If task was started with <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code>, it must be stopped with <code><a title="rpa_logger.logger.Logger.finish_task" href="logger.html#rpa_logger.logger.Logger.finish_task">Logger.finish_task()</a></code> to stop printing the progress spinner.</p>
 <p>The tasks are indentified with keys. Keys are either provided as parameter when starting the task or, if the <code>key</code> parameter is omitted, new <code>uuid</code> is automatically generated. In both cases, the key used to identify the started task is returned by the <code><a title="rpa_logger.logger.Logger.start_task" href="logger.html#rpa_logger.logger.Logger.start_task">Logger.start_task()</a></code> method. A key can be anything that can be used as a dict <code>key</code>.</p>
+<p>After all tasks to be logged have finished, <code><a title="rpa_logger.logger.Logger.finish_suite" href="logger.html#rpa_logger.logger.Logger.finish_suite">Logger.finish_suite()</a></code> can be used to finish the <code><a title="rpa_logger.task.TaskSuite" href="task.html#rpa_logger.task.TaskSuite">TaskSuite</a></code> instance automatically created by the <code><a title="rpa_logger.logger.Logger" href="logger.html#rpa_logger.logger.Logger">Logger</a></code>. This sets the <code><a title="rpa_logger.task.TaskSuite.finished" href="task.html#rpa_logger.task.BaseTask.finished">TaskSuite.finished</a></code> and <code><a title="rpa_logger.task.TaskSuite.status" href="task.html#rpa_logger.task.BaseTask.status">TaskSuite.status</a></code> variables.</p>
 <h2 id="title-and-summary">Title and summary</h2>
 <p>In addition to logging tasks, the <code><a title="rpa_logger.logger.Logger" href="logger.html#rpa_logger.logger.Logger">Logger</a></code> provides <code><a title="rpa_logger.logger.Logger.title" href="logger.html#rpa_logger.logger.Logger.title">Logger.title()</a></code> and <code><a title="rpa_logger.logger.Logger.summary" href="logger.html#rpa_logger.logger.Logger.summary">Logger.summary()</a></code> methods for printing title and summary for the RPA process, respectively. Example usage of these methods is provided in <code>examples/title_and_summary.py</code>:</p>
 <pre><code class="language-python">from rpa_logger import Logger
@@ -56,6 +58,8 @@ l.title(
 
 for status in ['SUCCESS', 'IGNORED', 'FAILURE', 'ERROR', 'SKIPPED', 'UNKNOWN']:
     l.log_task(status, f'Demonstrate {status.lower()} status')
+
+l.finish_suite()
 
 # Summary returns number of non-ok tasks. Use that as exit code.
 code = l.summary()

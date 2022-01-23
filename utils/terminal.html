@@ -43,6 +43,48 @@ FRAMES = [&#39;⠋&#39;, &#39;⠙&#39;, &#39;⠹&#39;, &#39;⠸&#39;, &#39;⠼&#
 
 
 COLORS = dict(red=31, green=32, yellow=33, blue=34, magenta=35, grey=90)
+&#39;&#39;&#39;Dictionary of supported color values for `rpa_logger.utils.terminal.color`.
+&#39;&#39;&#39;
+
+
+def bold(text: str) -&gt; str:
+    &#39;&#39;&#39;Bold given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+
+    Returns:
+        String with formatted text.
+    &#39;&#39;&#39;
+    return f&#39;\033[1m{text}\033[22m&#39;
+
+
+def color(text: str, color_name: str) -&gt; str:
+    &#39;&#39;&#39;Color given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+        color_name: Color to format text with. See
+            `rpa_logger.utils.terminal.COLORS` for available values.
+
+    Returns:
+        String with formatted text.
+    &#39;&#39;&#39;
+    if color_name not in COLORS:
+        return text
+    return f&#39;\033[{COLORS[color_name]}m{text}\033[39m&#39;
+
+
+def remove_ansi_escapes(text: str) -&gt; str:
+    &#39;&#39;&#39;Remove ANSI escape codes from given string.
+
+    Args:
+        text: String with ANSI escape codes.
+
+    Returns:
+        `text` without any ANSI escape codes.
+    &#39;&#39;&#39;
+    return re.sub(r&#39;\033\[[^m]+m&#39;, &#39;&#39;, text)
 
 
 def fit_to_width(text: str) -&gt; str:
@@ -59,7 +101,7 @@ def fit_to_width(text: str) -&gt; str:
         The possibly truncated string
     &#39;&#39;&#39;
     max_len = get_terminal_size().columns
-    non_formatted_text = re.sub(r&#39;\033\[[0-9]+m&#39;, &#39;&#39;, text.replace(&#39;\r&#39;, &#39;&#39;))
+    non_formatted_text = remove_ansi_escapes(text.replace(&#39;\r&#39;, &#39;&#39;))
 
     if len(non_formatted_text) &lt;= max_len:
         return text
@@ -118,10 +160,45 @@ def print_spinner_and_text(
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-variables">Global variables</h2>
+<dl>
+<dt id="rpa_logger.utils.terminal.COLORS"><code class="name">var <span class="ident">COLORS</span></code></dt>
+<dd>
+<div class="desc"><p>Dictionary of supported color values for <code><a title="rpa_logger.utils.terminal.color" href="#rpa_logger.utils.terminal.color">color()</a></code>.</p></div>
+</dd>
+</dl>
 </section>
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
+<dt id="rpa_logger.utils.terminal.bold"><code class="name flex">
+<span>def <span class="ident">bold</span></span>(<span>text: str) ‑> str</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Bold given text with ANSI escape codes.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>text</code></strong></dt>
+<dd>Text to be formatted.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>String with formatted text.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def bold(text: str) -&gt; str:
+    &#39;&#39;&#39;Bold given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+
+    Returns:
+        String with formatted text.
+    &#39;&#39;&#39;
+    return f&#39;\033[1m{text}\033[22m&#39;</code></pre>
+</details>
+</dd>
 <dt id="rpa_logger.utils.terminal.clear_current_row"><code class="name flex">
 <span>def <span class="ident">clear_current_row</span></span>(<span>file: <class 'TextIO'> = sys.stdout)</span>
 </code></dt>
@@ -147,6 +224,41 @@ def print_spinner_and_text(
     &#39;&#39;&#39;
     width = get_terminal_size().columns
     print(f&#39;\r{&#34; &#34; * width}&#39;, file=file, end=&#39;&#39;)</code></pre>
+</details>
+</dd>
+<dt id="rpa_logger.utils.terminal.color"><code class="name flex">
+<span>def <span class="ident">color</span></span>(<span>text: str, color_name: str) ‑> str</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Color given text with ANSI escape codes.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>text</code></strong></dt>
+<dd>Text to be formatted.</dd>
+<dt><strong><code>color_name</code></strong></dt>
+<dd>Color to format text with. See
+<code><a title="rpa_logger.utils.terminal.COLORS" href="#rpa_logger.utils.terminal.COLORS">COLORS</a></code> for available values.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>String with formatted text.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def color(text: str, color_name: str) -&gt; str:
+    &#39;&#39;&#39;Color given text with ANSI escape codes.
+
+    Args:
+        text: Text to be formatted.
+        color_name: Color to format text with. See
+            `rpa_logger.utils.terminal.COLORS` for available values.
+
+    Returns:
+        String with formatted text.
+    &#39;&#39;&#39;
+    if color_name not in COLORS:
+        return text
+    return f&#39;\033[{COLORS[color_name]}m{text}\033[39m&#39;</code></pre>
 </details>
 </dd>
 <dt id="rpa_logger.utils.terminal.fit_to_width"><code class="name flex">
@@ -182,7 +294,7 @@ formatting is cleared when text is truncated.</p>
         The possibly truncated string
     &#39;&#39;&#39;
     max_len = get_terminal_size().columns
-    non_formatted_text = re.sub(r&#39;\033\[[0-9]+m&#39;, &#39;&#39;, text.replace(&#39;\r&#39;, &#39;&#39;))
+    non_formatted_text = remove_ansi_escapes(text.replace(&#39;\r&#39;, &#39;&#39;))
 
     if len(non_formatted_text) &lt;= max_len:
         return text
@@ -246,6 +358,34 @@ formatting is cleared when text is truncated.</p>
     print(&#39;\r&#39;, end=&#39;&#39;)</code></pre>
 </details>
 </dd>
+<dt id="rpa_logger.utils.terminal.remove_ansi_escapes"><code class="name flex">
+<span>def <span class="ident">remove_ansi_escapes</span></span>(<span>text: str) ‑> str</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Remove ANSI escape codes from given string.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>text</code></strong></dt>
+<dd>String with ANSI escape codes.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p><code>text</code> without any ANSI escape codes.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def remove_ansi_escapes(text: str) -&gt; str:
+    &#39;&#39;&#39;Remove ANSI escape codes from given string.
+
+    Args:
+        text: String with ANSI escape codes.
+
+    Returns:
+        `text` without any ANSI escape codes.
+    &#39;&#39;&#39;
+    return re.sub(r&#39;\033\[[^m]+m&#39;, &#39;&#39;, text)</code></pre>
+</details>
+</dd>
 </dl>
 </section>
 <section>
@@ -262,11 +402,19 @@ formatting is cleared when text is truncated.</p>
 <li><code><a title="rpa_logger.utils" href="index.html">rpa_logger.utils</a></code></li>
 </ul>
 </li>
+<li><h3><a href="#header-variables">Global variables</a></h3>
+<ul class="">
+<li><code><a title="rpa_logger.utils.terminal.COLORS" href="#rpa_logger.utils.terminal.COLORS">COLORS</a></code></li>
+</ul>
+</li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
+<li><code><a title="rpa_logger.utils.terminal.bold" href="#rpa_logger.utils.terminal.bold">bold</a></code></li>
 <li><code><a title="rpa_logger.utils.terminal.clear_current_row" href="#rpa_logger.utils.terminal.clear_current_row">clear_current_row</a></code></li>
+<li><code><a title="rpa_logger.utils.terminal.color" href="#rpa_logger.utils.terminal.color">color</a></code></li>
 <li><code><a title="rpa_logger.utils.terminal.fit_to_width" href="#rpa_logger.utils.terminal.fit_to_width">fit_to_width</a></code></li>
 <li><code><a title="rpa_logger.utils.terminal.print_spinner_and_text" href="#rpa_logger.utils.terminal.print_spinner_and_text">print_spinner_and_text</a></code></li>
+<li><code><a title="rpa_logger.utils.terminal.remove_ansi_escapes" href="#rpa_logger.utils.terminal.remove_ansi_escapes">remove_ansi_escapes</a></code></li>
 </ul>
 </li>
 </ul>

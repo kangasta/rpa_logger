@@ -41,7 +41,12 @@ from threading import Event, Thread
 from typing import Callable, Hashable, Tuple, TextIO
 
 from .task import *
-from .utils.terminal import clear_current_row, print_spinner_and_text, COLORS
+from .utils.terminal import (
+    bold,
+    clear_current_row,
+    color,
+    print_spinner_and_text,
+    remove_ansi_escapes)
 
 
 def get_indicator(status: str, ascii_only: bool = False) -&gt; Tuple[str, str]:
@@ -96,6 +101,19 @@ def is_status_ok(status: str) -&gt; bool:
     return status not in (FAILURE, ERROR,)
 
 
+@dataclass
+class LoggerOutputOptions:
+    &#39;&#39;&#39;Dataclass that stores the output options of a
+    `rpa_logger.logger.Logger`. See `rpa_logger.logger.Logger` args for
+    details on each attribute.
+    &#39;&#39;&#39;
+    animations: bool = True
+    colors: bool = True
+    ascii_only: bool = False
+    print_output_immediately: bool = False
+    target: TextIO = None
+
+
 class Logger:
     &#39;&#39;&#39;Interface for logging RPA tasks.
 
@@ -103,6 +121,8 @@ class Logger:
         animations: If true, progress indicator is displayed.
         colors: If true, ANSI escape codes are used when logging to console.
         ascii_only: If true, use ascii only spinner and status indicators.
+        print_output_immediately: If true, print output as it is logged.
+            Otherwise, log output when task is finished.
         target: File to print output to. Defaults to stdout.
         multiple_fn: Function used to determine progress message when multiple
             tasks are in progress. Defaults to
@@ -124,11 +144,13 @@ class Logger:
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None,
             status_ok_fn: Callable[[str], bool] = None):
-        self._animations = animations
-        self._colors = colors
-        self._ascii_only = ascii_only
-        self._print_output_immediately = print_output_immediately
-        self._target = target or stdout
+        self.options = LoggerOutputOptions(
+            animations=animations,
+            colors=colors,
+            ascii_only=ascii_only,
+            print_output_immediately=print_output_immediately,
+            target=target or stdout
+        )
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
@@ -141,35 +163,20 @@ class Logger:
         &#39;&#39;&#39;`rpa_logger.task.TaskSuite` where logger stores task data.&#39;&#39;&#39;
 
     def bold(self, text: str) -&gt; str:
-        &#39;&#39;&#39;Bold given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-
-        Returns:
-            String with formatted text.
+        &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.bold`.
         &#39;&#39;&#39;
-        if not self._colors:
-            return text
-        return f&#39;\033[1m{text}\033[22m&#39;
+        return bold(text)
 
-    def color(self, text: str, color: str) -&gt; str:
-        &#39;&#39;&#39;Color given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-            color: Color to format text with. See
-                `rpa_logger.utils.terminal.COLORS` for available values.
-
-        Returns:
-            String with formatted text.
+    def color(self, text: str, color_name: str) -&gt; str:
+        &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.color`.
         &#39;&#39;&#39;
-        if not self._colors or color not in COLORS:
-            return text
-        return f&#39;\033[{COLORS[color]}m{text}\033[39m&#39;
+        return color(text, color_name)
 
     def _print(self, *args, **kwargs):
-        return print(*args, file=self._target, **kwargs)
+        if not self.options.colors:
+            objs = (remove_ansi_escapes(str(arg)) for arg in args)
+            return print(*objs, file=self.options.target, **kwargs)
+        return print(*args, file=self.options.target, **kwargs)
 
     def error(self, text: str) -&gt; None:
         &#39;&#39;&#39;Print error message.
@@ -194,7 +201,7 @@ class Logger:
         self._print(f&#39;{title_text}{description or &#34;&#34;}\n&#39;)
 
     def _print_active(self):
-        if not self._animations:
+        if not self.options.animations:
             return
 
         num_active = len(self.suite.active_tasks)
@@ -205,7 +212,7 @@ class Logger:
         else:
             text = self.suite.active_tasks[0].name
 
-        clear_current_row(self._target)
+        clear_current_row(self.options.target)
         self.stop_progress_animation()
 
         self._spinner_thread = Thread(
@@ -213,13 +220,14 @@ class Logger:
             args=[
                 text,
                 self._spinner_stop_event,
-                self._target,
-                self._ascii_only])
+                self.options.target,
+                self.options.ascii_only])
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
     def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        color, symbol = self._get_progress_indicator(
+            status, self.options.ascii_only)
         return self.bold(self.color(symbol, color))
 
     def _print_task(self, key):
@@ -242,7 +250,7 @@ class Logger:
         &#39;&#39;&#39;
         key = self.suite.create_task(text, key)
 
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self._print_task(key)
 
         self._print_active()
@@ -288,13 +296,13 @@ class Logger:
         if text:
             task.name = text
 
-        if self._print_output_immediately and task.output:
-            clear_current_row(self._target)
+        if self.options.print_output_immediately and task.output:
+            clear_current_row(self.options.target)
             self._print(&#39;&#39;)
 
         self._print_task(key)
 
-        if not self._print_output_immediately:
+        if not self.options.print_output_immediately:
             output_text = indent(
                 &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
             if output_text:
@@ -342,7 +350,7 @@ class Logger:
             text: Output text content.
             stream: Output stream. Defaults to `stdout`.
         &#39;&#39;&#39;
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self.stop_progress_animation()
             self._print(indent(text, &#39;  &#39;))
             self._print_active()
@@ -517,6 +525,9 @@ class Logger:
 <dd>If true, ANSI escape codes are used when logging to console.</dd>
 <dt><strong><code>ascii_only</code></strong></dt>
 <dd>If true, use ascii only spinner and status indicators.</dd>
+<dt><strong><code>print_output_immediately</code></strong></dt>
+<dd>If true, print output as it is logged.
+Otherwise, log output when task is finished.</dd>
 <dt><strong><code>target</code></strong></dt>
 <dd>File to print output to. Defaults to stdout.</dd>
 <dt><strong><code>multiple_fn</code></strong></dt>
@@ -542,6 +553,8 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         animations: If true, progress indicator is displayed.
         colors: If true, ANSI escape codes are used when logging to console.
         ascii_only: If true, use ascii only spinner and status indicators.
+        print_output_immediately: If true, print output as it is logged.
+            Otherwise, log output when task is finished.
         target: File to print output to. Defaults to stdout.
         multiple_fn: Function used to determine progress message when multiple
             tasks are in progress. Defaults to
@@ -563,11 +576,13 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None,
             status_ok_fn: Callable[[str], bool] = None):
-        self._animations = animations
-        self._colors = colors
-        self._ascii_only = ascii_only
-        self._print_output_immediately = print_output_immediately
-        self._target = target or stdout
+        self.options = LoggerOutputOptions(
+            animations=animations,
+            colors=colors,
+            ascii_only=ascii_only,
+            print_output_immediately=print_output_immediately,
+            target=target or stdout
+        )
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
@@ -580,35 +595,20 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         &#39;&#39;&#39;`rpa_logger.task.TaskSuite` where logger stores task data.&#39;&#39;&#39;
 
     def bold(self, text: str) -&gt; str:
-        &#39;&#39;&#39;Bold given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-
-        Returns:
-            String with formatted text.
+        &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.bold`.
         &#39;&#39;&#39;
-        if not self._colors:
-            return text
-        return f&#39;\033[1m{text}\033[22m&#39;
+        return bold(text)
 
-    def color(self, text: str, color: str) -&gt; str:
-        &#39;&#39;&#39;Color given text with ANSI escape codes.
-
-        Args:
-            text: Text to be formatted.
-            color: Color to format text with. See
-                `rpa_logger.utils.terminal.COLORS` for available values.
-
-        Returns:
-            String with formatted text.
+    def color(self, text: str, color_name: str) -&gt; str:
+        &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.color`.
         &#39;&#39;&#39;
-        if not self._colors or color not in COLORS:
-            return text
-        return f&#39;\033[{COLORS[color]}m{text}\033[39m&#39;
+        return color(text, color_name)
 
     def _print(self, *args, **kwargs):
-        return print(*args, file=self._target, **kwargs)
+        if not self.options.colors:
+            objs = (remove_ansi_escapes(str(arg)) for arg in args)
+            return print(*objs, file=self.options.target, **kwargs)
+        return print(*args, file=self.options.target, **kwargs)
 
     def error(self, text: str) -&gt; None:
         &#39;&#39;&#39;Print error message.
@@ -633,7 +633,7 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         self._print(f&#39;{title_text}{description or &#34;&#34;}\n&#39;)
 
     def _print_active(self):
-        if not self._animations:
+        if not self.options.animations:
             return
 
         num_active = len(self.suite.active_tasks)
@@ -644,7 +644,7 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         else:
             text = self.suite.active_tasks[0].name
 
-        clear_current_row(self._target)
+        clear_current_row(self.options.target)
         self.stop_progress_animation()
 
         self._spinner_thread = Thread(
@@ -652,13 +652,14 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
             args=[
                 text,
                 self._spinner_stop_event,
-                self._target,
-                self._ascii_only])
+                self.options.target,
+                self.options.ascii_only])
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
     def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        color, symbol = self._get_progress_indicator(
+            status, self.options.ascii_only)
         return self.bold(self.color(symbol, color))
 
     def _print_task(self, key):
@@ -681,7 +682,7 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         &#39;&#39;&#39;
         key = self.suite.create_task(text, key)
 
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self._print_task(key)
 
         self._print_active()
@@ -727,13 +728,13 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
         if text:
             task.name = text
 
-        if self._print_output_immediately and task.output:
-            clear_current_row(self._target)
+        if self.options.print_output_immediately and task.output:
+            clear_current_row(self.options.target)
             self._print(&#39;&#39;)
 
         self._print_task(key)
 
-        if not self._print_output_immediately:
+        if not self.options.print_output_immediately:
             output_text = indent(
                 &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
             if output_text:
@@ -781,7 +782,7 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
             text: Output text content.
             stream: Output stream. Defaults to `stdout`.
         &#39;&#39;&#39;
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self.stop_progress_animation()
             self._print(indent(text, &#39;  &#39;))
             self._print_active()
@@ -838,65 +839,30 @@ Defaults to <code><a title="rpa_logger.logger.get_indicator" href="#rpa_logger.l
 <span>def <span class="ident">bold</span></span>(<span>self, text: str) ‑> str</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Bold given text with ANSI escape codes.</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>text</code></strong></dt>
-<dd>Text to be formatted.</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<p>String with formatted text.</p></div>
+<div class="desc"><p>Shortcut for <code><a title="rpa_logger.utils.terminal.bold" href="utils/terminal.html#rpa_logger.utils.terminal.bold">bold()</a></code>.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def bold(self, text: str) -&gt; str:
-    &#39;&#39;&#39;Bold given text with ANSI escape codes.
-
-    Args:
-        text: Text to be formatted.
-
-    Returns:
-        String with formatted text.
+    &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.bold`.
     &#39;&#39;&#39;
-    if not self._colors:
-        return text
-    return f&#39;\033[1m{text}\033[22m&#39;</code></pre>
+    return bold(text)</code></pre>
 </details>
 </dd>
 <dt id="rpa_logger.logger.Logger.color"><code class="name flex">
-<span>def <span class="ident">color</span></span>(<span>self, text: str, color: str) ‑> str</span>
+<span>def <span class="ident">color</span></span>(<span>self, text: str, color_name: str) ‑> str</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Color given text with ANSI escape codes.</p>
-<h2 id="args">Args</h2>
-<dl>
-<dt><strong><code>text</code></strong></dt>
-<dd>Text to be formatted.</dd>
-<dt><strong><code>color</code></strong></dt>
-<dd>Color to format text with. See
-<code>rpa_logger.utils.terminal.COLORS</code> for available values.</dd>
-</dl>
-<h2 id="returns">Returns</h2>
-<p>String with formatted text.</p></div>
+<div class="desc"><p>Shortcut for <code><a title="rpa_logger.utils.terminal.color" href="utils/terminal.html#rpa_logger.utils.terminal.color">color()</a></code>.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def color(self, text: str, color: str) -&gt; str:
-    &#39;&#39;&#39;Color given text with ANSI escape codes.
-
-    Args:
-        text: Text to be formatted.
-        color: Color to format text with. See
-            `rpa_logger.utils.terminal.COLORS` for available values.
-
-    Returns:
-        String with formatted text.
+<pre><code class="python">def color(self, text: str, color_name: str) -&gt; str:
+    &#39;&#39;&#39;Shortcut for `rpa_logger.utils.terminal.color`.
     &#39;&#39;&#39;
-    if not self._colors or color not in COLORS:
-        return text
-    return f&#39;\033[{COLORS[color]}m{text}\033[39m&#39;</code></pre>
+    return color(text, color_name)</code></pre>
 </details>
 </dd>
 <dt id="rpa_logger.logger.Logger.error"><code class="name flex">
@@ -1008,13 +974,13 @@ when the task was created if <code>key</code> is given.</dd>
     if text:
         task.name = text
 
-    if self._print_output_immediately and task.output:
-        clear_current_row(self._target)
+    if self.options.print_output_immediately and task.output:
+        clear_current_row(self.options.target)
         self._print(&#39;&#39;)
 
     self._print_task(key)
 
-    if not self._print_output_immediately:
+    if not self.options.print_output_immediately:
         output_text = indent(
             &#39;\n&#39;.join(i.text for i in task.output), &#39;  &#39;).rstrip()
         if output_text:
@@ -1087,7 +1053,7 @@ is logged to the suite.</dd>
         text: Output text content.
         stream: Output stream. Defaults to `stdout`.
     &#39;&#39;&#39;
-    if self._print_output_immediately:
+    if self.options.print_output_immediately:
         self.stop_progress_animation()
         self._print(indent(text, &#39;  &#39;))
         self._print_active()
@@ -1161,7 +1127,7 @@ will be used.</dd>
     &#39;&#39;&#39;
     key = self.suite.create_task(text, key)
 
-    if self._print_output_immediately:
+    if self.options.print_output_immediately:
         self._print_task(key)
 
     self._print_active()
@@ -1251,6 +1217,53 @@ there are active progress indicators.</p></div>
 </dd>
 </dl>
 </dd>
+<dt id="rpa_logger.logger.LoggerOutputOptions"><code class="flex name class">
+<span>class <span class="ident">LoggerOutputOptions</span></span>
+<span>(</span><span>animations: bool = True, colors: bool = True, ascii_only: bool = False, print_output_immediately: bool = False, target: <class 'TextIO'> = None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Dataclass that stores the output options of a
+<code><a title="rpa_logger.logger.Logger" href="#rpa_logger.logger.Logger">Logger</a></code>. See <code><a title="rpa_logger.logger.Logger" href="#rpa_logger.logger.Logger">Logger</a></code> args for
+details on each attribute.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class LoggerOutputOptions:
+    &#39;&#39;&#39;Dataclass that stores the output options of a
+    `rpa_logger.logger.Logger`. See `rpa_logger.logger.Logger` args for
+    details on each attribute.
+    &#39;&#39;&#39;
+    animations: bool = True
+    colors: bool = True
+    ascii_only: bool = False
+    print_output_immediately: bool = False
+    target: TextIO = None</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="rpa_logger.logger.LoggerOutputOptions.animations"><code class="name">var <span class="ident">animations</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="rpa_logger.logger.LoggerOutputOptions.ascii_only"><code class="name">var <span class="ident">ascii_only</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="rpa_logger.logger.LoggerOutputOptions.colors"><code class="name">var <span class="ident">colors</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="rpa_logger.logger.LoggerOutputOptions.print_output_immediately"><code class="name">var <span class="ident">print_output_immediately</span> : bool</code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="rpa_logger.logger.LoggerOutputOptions.target"><code class="name">var <span class="ident">target</span> : <class 'TextIO'></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+</dd>
 </dl>
 </section>
 </article>
@@ -1290,6 +1303,16 @@ there are active progress indicators.</p></div>
 <li><code><a title="rpa_logger.logger.Logger.suite" href="#rpa_logger.logger.Logger.suite">suite</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.summary" href="#rpa_logger.logger.Logger.summary">summary</a></code></li>
 <li><code><a title="rpa_logger.logger.Logger.title" href="#rpa_logger.logger.Logger.title">title</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rpa_logger.logger.LoggerOutputOptions" href="#rpa_logger.logger.LoggerOutputOptions">LoggerOutputOptions</a></code></h4>
+<ul class="">
+<li><code><a title="rpa_logger.logger.LoggerOutputOptions.animations" href="#rpa_logger.logger.LoggerOutputOptions.animations">animations</a></code></li>
+<li><code><a title="rpa_logger.logger.LoggerOutputOptions.ascii_only" href="#rpa_logger.logger.LoggerOutputOptions.ascii_only">ascii_only</a></code></li>
+<li><code><a title="rpa_logger.logger.LoggerOutputOptions.colors" href="#rpa_logger.logger.LoggerOutputOptions.colors">colors</a></code></li>
+<li><code><a title="rpa_logger.logger.LoggerOutputOptions.print_output_immediately" href="#rpa_logger.logger.LoggerOutputOptions.print_output_immediately">print_output_immediately</a></code></li>
+<li><code><a title="rpa_logger.logger.LoggerOutputOptions.target" href="#rpa_logger.logger.LoggerOutputOptions.target">target</a></code></li>
 </ul>
 </li>
 </ul>
