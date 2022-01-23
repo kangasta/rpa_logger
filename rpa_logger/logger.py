@@ -65,6 +65,19 @@ def is_status_ok(status: str) -> bool:
     return status not in (FAILURE, ERROR,)
 
 
+@dataclass
+class LoggerOutputOptions:
+    '''Dataclass that stores the output options of a
+    `rpa_logger.logger.Logger`. See `rpa_logger.logger.Logger` args for
+    details on each attribute.
+    '''
+    animations: bool = True
+    colors: bool = True
+    ascii_only: bool = False
+    print_output_immediately: bool = False
+    target: TextIO = None
+
+
 class Logger:
     '''Interface for logging RPA tasks.
 
@@ -72,6 +85,8 @@ class Logger:
         animations: If true, progress indicator is displayed.
         colors: If true, ANSI escape codes are used when logging to console.
         ascii_only: If true, use ascii only spinner and status indicators.
+        print_output_immediately: If true, print output as it is logged.
+            Otherwise, log output when task is finished.
         target: File to print output to. Defaults to stdout.
         multiple_fn: Function used to determine progress message when multiple
             tasks are in progress. Defaults to
@@ -93,11 +108,13 @@ class Logger:
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None,
             status_ok_fn: Callable[[str], bool] = None):
-        self._animations = animations
-        self._colors = colors
-        self._ascii_only = ascii_only
-        self._print_output_immediately = print_output_immediately
-        self._target = target or stdout
+        self.options = LoggerOutputOptions(
+            animations=animations,
+            colors=colors,
+            ascii_only=ascii_only,
+            print_output_immediately=print_output_immediately,
+            target=target or stdout
+        )
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
@@ -118,7 +135,7 @@ class Logger:
         Returns:
             String with formatted text.
         '''
-        if not self._colors:
+        if not self.options.colors:
             return text
         return f'\033[1m{text}\033[22m'
 
@@ -133,12 +150,12 @@ class Logger:
         Returns:
             String with formatted text.
         '''
-        if not self._colors or color not in COLORS:
+        if not self.options.colors or color not in COLORS:
             return text
         return f'\033[{COLORS[color]}m{text}\033[39m'
 
     def _print(self, *args, **kwargs):
-        return print(*args, file=self._target, **kwargs)
+        return print(*args, file=self.options.target, **kwargs)
 
     def error(self, text: str) -> None:
         '''Print error message.
@@ -163,7 +180,7 @@ class Logger:
         self._print(f'{title_text}{description or ""}\n')
 
     def _print_active(self):
-        if not self._animations:
+        if not self.options.animations:
             return
 
         num_active = len(self.suite.active_tasks)
@@ -174,7 +191,7 @@ class Logger:
         else:
             text = self.suite.active_tasks[0].name
 
-        clear_current_row(self._target)
+        clear_current_row(self.options.target)
         self.stop_progress_animation()
 
         self._spinner_thread = Thread(
@@ -182,13 +199,14 @@ class Logger:
             args=[
                 text,
                 self._spinner_stop_event,
-                self._target,
-                self._ascii_only])
+                self.options.target,
+                self.options.ascii_only])
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
 
     def _get_indicator_text(self, status):
-        color, symbol = self._get_progress_indicator(status, self._ascii_only)
+        color, symbol = self._get_progress_indicator(
+            status, self.options.ascii_only)
         return self.bold(self.color(symbol, color))
 
     def _print_task(self, key):
@@ -211,7 +229,7 @@ class Logger:
         '''
         key = self.suite.create_task(text, key)
 
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self._print_task(key)
 
         self._print_active()
@@ -257,13 +275,13 @@ class Logger:
         if text:
             task.name = text
 
-        if self._print_output_immediately and task.output:
-            clear_current_row(self._target)
+        if self.options.print_output_immediately and task.output:
+            clear_current_row(self.options.target)
             self._print('')
 
         self._print_task(key)
 
-        if not self._print_output_immediately:
+        if not self.options.print_output_immediately:
             output_text = indent(
                 '\n'.join(i.text for i in task.output), '  ').rstrip()
             if output_text:
@@ -311,7 +329,7 @@ class Logger:
             text: Output text content.
             stream: Output stream. Defaults to `stdout`.
         '''
-        if self._print_output_immediately:
+        if self.options.print_output_immediately:
             self.stop_progress_animation()
             self._print(indent(text, '  '))
             self._print_active()
