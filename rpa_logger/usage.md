@@ -18,6 +18,8 @@ If task was started with `rpa_logger.logger.Logger.start_task`, it must be stopp
 
 The tasks are indentified with keys. Keys are either provided as parameter when starting the task or, if the `key` parameter is omitted, new `uuid` is automatically generated. In both cases, the key used to identify the started task is returned by the `rpa_logger.logger.Logger.start_task` method. A key can be anything that can be used as a dict `key`.
 
+After all tasks to be logged have finished, `rpa_logger.logger.Logger.finish_suite` can be used to finish the `rpa_logger.task.TaskSuite` instance automatically created by the `rpa_logger.logger.Logger`. This sets the `rpa_logger.task.TaskSuite.finished` and `rpa_logger.task.TaskSuite.status` variables.
+
 ## Title and summary
 
 In addition to logging tasks, the `rpa_logger.logger.Logger` provides `rpa_logger.logger.Logger.title` and `rpa_logger.logger.Logger.summary` methods for printing title and summary for the RPA process, respectively. Example usage of these methods is provided in `examples/title_and_summary.py`:
