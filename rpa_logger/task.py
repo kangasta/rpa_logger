@@ -225,6 +225,7 @@ class TaskSuite(BaseTask):
         '''
         if task_key:
             self._tasks[task_key].log_metadata(key, value)
+            return
 
         super().log_metadata(key, value)
 
