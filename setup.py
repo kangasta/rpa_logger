@@ -27,6 +27,9 @@ setuptools.setup(
         'Tracker': 'https://github.com/kangasta/rpa_logger/issues/',
     },
     packages=setuptools.find_packages(),
+    package_data={
+        'rpa_logger': ['templates/*.j2'],
+    },
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

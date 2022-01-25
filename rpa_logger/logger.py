@@ -158,7 +158,8 @@ class Logger:
 
         self._print(f'{indicator_text} {indented_text}\n')
 
-    def start_suite(self, text: str, key: Hashable = None, **kwargs) -> Tuple[Hashable, 'Logger']:
+    def start_suite(self, text: str, key: Hashable = None,
+                    **kwargs) -> Tuple[Hashable, 'Logger']:
         '''Start child suite and return `rpa_logger.logger.Logger` for the
         created suite.
 
@@ -166,7 +167,8 @@ class Logger:
         `target.`. Other `rpa_logger.logger.LoggerOutputOptions` are inherited
         from current suite. This can be overridden by suitable `kwargs`.
 
-        To finish child suite, use `rpa_logger.logger.Logger.finish_task` method of the parent suite.
+        To finish child suite, use `rpa_logger.logger.Logger.finish_task`
+        method of the parent suite.
 
         Args:
             text: Name of the for the suite to be created.

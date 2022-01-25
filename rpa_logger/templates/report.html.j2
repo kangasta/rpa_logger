@@ -1,0 +1,22 @@
+<html>
+  <head>
+    <title>{{ suite.name | default('RPA report') }}</title>
+    <style>
+      {% include 'styles.css.j2' %}
+    </style>
+  </head>
+  <body>
+    <main>
+      {% set main_level = True %}
+      {% include 'suite.html.j2' %}
+      {% set main_level = False %}
+      <h2>Child suites</h2>
+      {% for suite in child_suites %}
+        {% include 'suite.html.j2' %}
+      {% endfor%}
+    </main>
+    <footer>
+      Generated with <b><a href="https://github.com/kangasta/rpa_logger" target="_blank">rpa_logger</a></b> version {{ version }}
+    </footer>
+  </body>
+</html>

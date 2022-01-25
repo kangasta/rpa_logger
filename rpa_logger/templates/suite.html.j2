@@ -1,0 +1,36 @@
+{% set h_name = 'h1' if main_level else 'h3' %}
+{% set h_tasks = 'h2' if main_level else 'h3' %}
+<div class=suite-header>
+  <{{ h_name }} id="suite-{{ suite.key }}">{{ suite.status | status_to_html }} {{ suite.name | default('RPA report') }}</{{ h_name }}>
+  <div class="suite-rainbow">
+    {% for status, count in suite.task_status_counter.items() %}
+      <div class="{{ status | status_to_color }}" style="background: currentColor; flex: {{ count }};"></div>
+    {% endfor %}
+  </div>
+</div>
+{% if not main_level %}
+<p>Go to <a href="#task-{{ suite.key }}">parent suite</a></p>
+{% endif %}
+{% if suite.description %}
+  <p>{{ suite.description }}</p>
+{% endif %}
+<div class="status-breakdown">
+  {% for status, count in suite.task_status_counter.items() %}
+    <div class="status-breakdown-item">
+      {{ status | status_to_html }} {{ status | title }}: {{ count }}
+    </div>
+  {% endfor %}
+</div>
+<table class="metadata">
+  <tbody>
+    <tr><td>started</td><td>{{ suite.started }}</td></tr>
+    <tr><td>finished</td><td>{{ suite.finished }}</td></tr>
+    {% for key, value in suite.metadata.items() %}
+      <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<{{ h_tasks }}>Tasks</{{ h_tasks }}>
+{% for task in suite.tasks %}
+  {% include 'task.html.j2' %}
+{% endfor%}

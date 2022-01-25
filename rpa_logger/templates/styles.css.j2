@@ -1,0 +1,125 @@
+:root {
+  --red: #e66;
+  --green: #6b6;
+  --blue: #88f;
+  --cyan: #6bb;
+  --magenta: #c7c;
+  --yellow: #c85;
+  --grey: #999;
+  --black: #222226;
+  --white: #ddd;
+}
+
+body {
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  flex-direction: column;
+  font-family: 'Source Code Pro', 'Ubuntu Mono', 'SF Mono', 'Consolas', monospace;
+  margin: 0;
+  min-height: 100vh;
+}
+
+main {
+  box-sizing: border-box;
+  flex: 1;
+  margin: auto;
+  margin-bottom: 3em;
+  margin-top: 1em;
+  max-width: 1000px;
+  padding: 0 1em;
+}
+
+footer {
+  color: var(--grey);
+  font-size: 0.75em;
+  margin: auto;
+  max-width: 1000px;
+  padding: 0.5em 0;
+  text-align: center;
+}
+
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+a:visited {
+  color: var(--blue);
+}
+
+a:hover, a:focus {
+  outline: none;
+  text-decoration: underline;
+}
+
+{% for color in ['red', 'green', 'blue', 'cyan', 'magenta', 'yellow', 'grey', 'black', 'white'] %}
+  .{{ color }} {
+    color: var(--{{ color }})
+  }
+{% endfor%}
+
+.suite-header {
+  display: flex;
+  align-items: baseline;
+}
+
+.suite-rainbow {
+  border-radius: 1em;
+  display: flex;
+  flex: 1;
+  height: 0.3em;
+  margin-left: 1.5em;
+  overflow: hidden;
+}
+
+.status-breakdown {
+  align-items: baseline;
+  display: flex;
+  margin-bottom: 1em;
+}
+
+.status-breakdown-item {
+  margin-right: 2em;
+}
+
+table.metadata {
+  color: var(--grey);
+  margin-bottom: 1em;
+  table-layout: fixed;
+  width: 100%;
+}
+
+table.metadata td:nth-of-type(1) { width: 30%; }
+table.metadata td:nth-of-type(2) { width: 70%; }
+
+table.output {
+  margin-bottom: 1em;
+  white-space: pre;
+}
+
+table.output .timestamp {
+  color: var(--grey);
+  padding-right: 1em;
+}
+
+table.output .stdin {
+  color: var(--green);
+}
+
+table.output .stderr {
+  color: var(--red);
+  font-weight: bold;
+}
+
+td {
+  padding: 0;
+}
+
+.status {
+  font-weight: bold;
+}
+
+.name {
+  white-space: pre;
+}

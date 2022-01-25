@@ -12,3 +12,6 @@ dist/
 
 # Documentation build
 docs/
+
+# Default HTML report filename
+rpa_report.html
