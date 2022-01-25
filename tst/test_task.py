@@ -93,3 +93,13 @@ class TaskTest(TestCase):
         self.assertEqual(suite_dict['tasks'][0]['output'][0]['text'], output)
 
         json.dumps(suite_dict)
+
+    def test_log_metadata(self):
+        suite = TaskSuite('Test suite')
+
+        key = suite.create_task('Test task')
+        suite.log_metadata('meta_key', 'meta_value', key)
+        suite.finish_task(key, 'SUCCESS')
+
+        self.assertEqual(suite.get_task(key).metadata.get('meta_key'), 'meta_value')
+        self.assertIsNone(suite.metadata.get('meta_key'))
