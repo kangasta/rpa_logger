@@ -254,6 +254,7 @@ class TaskSuite(BaseTask):
         &#39;&#39;&#39;
         if task_key:
             self._tasks[task_key].log_metadata(key, value)
+            return
 
         super().log_metadata(key, value)
 
@@ -683,6 +684,7 @@ or yaml, this value must be serializable.</dd>
         &#39;&#39;&#39;
         if task_key:
             self._tasks[task_key].log_metadata(key, value)
+            return
 
         super().log_metadata(key, value)
 
@@ -894,6 +896,7 @@ is logged to the suite.</dd>
     &#39;&#39;&#39;
     if task_key:
         self._tasks[task_key].log_metadata(key, value)
+        return
 
     super().log_metadata(key, value)</code></pre>
 </details>
