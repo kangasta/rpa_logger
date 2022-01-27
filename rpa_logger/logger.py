@@ -4,6 +4,8 @@ This module contains the `rpa_logger.logger.Logger` class and default
 functions it uses for its callback parameters.
 '''
 
+from dataclasses import asdict
+from io import StringIO
 from sys import stdout
 from textwrap import indent
 from threading import Event, Thread
@@ -80,7 +82,6 @@ class LoggerOutputOptions:
     colors: bool = True
     ascii_only: bool = False
     print_output_immediately: bool = False
-    target: TextIO = None
 
 
 class Logger:
@@ -101,6 +102,7 @@ class Logger:
             `rpa_logger.logger.get_indicator`.
         status_ok_fn: Function used to determine if given task status is ok.
             Defaults to `rpa_logger.logger.get_indicator`.
+        key: Key to identify loggers suite with.
     '''
 
     def __init__(
@@ -112,14 +114,15 @@ class Logger:
             target: TextIO = None,
             multiple_fn: Callable[[int], str] = None,
             indicator_fn: Callable[[str, bool], Tuple[str, str]] = None,
-            status_ok_fn: Callable[[str], bool] = None):
+            status_ok_fn: Callable[[str], bool] = None,
+            key: Hashable = None):
         self.options = LoggerOutputOptions(
             animations=animations,
             colors=colors,
             ascii_only=ascii_only,
             print_output_immediately=print_output_immediately,
-            target=target or stdout
         )
+        self._target = target or stdout
 
         self._get_multiple_active_str = multiple_fn or multiple_active_text
         self._get_progress_indicator = indicator_fn or get_indicator
@@ -128,7 +131,7 @@ class Logger:
         self._spinner_thread = None
         self._spinner_stop_event = Event()
 
-        self.suite = TaskSuite(None)
+        self.suite = TaskSuite(None, key=key)
         '''`rpa_logger.task.TaskSuite` where logger stores task data.'''
 
     def bold(self, text: str) -> str:
@@ -144,8 +147,8 @@ class Logger:
     def _print(self, *args, **kwargs):
         if not self.options.colors:
             objs = (remove_ansi_escapes(str(arg)) for arg in args)
-            return print(*objs, file=self.options.target, **kwargs)
-        return print(*args, file=self.options.target, **kwargs)
+            return print(*objs, file=self._target, **kwargs)
+        return print(*args, file=self._target, **kwargs)
 
     def error(self, text: str) -> None:
         '''Print error message.
@@ -181,7 +184,7 @@ class Logger:
         else:
             text = self.suite.active_tasks[0].name
 
-        clear_current_row(self.options.target)
+        clear_current_row(self._target)
         self.stop_progress_animation()
 
         self._spinner_thread = Thread(
@@ -189,7 +192,7 @@ class Logger:
             args=[
                 text,
                 self._spinner_stop_event,
-                self.options.target,
+                self._target,
                 self.options.ascii_only])
         self._spinner_stop_event.clear()
         self._spinner_thread.start()
@@ -205,6 +208,41 @@ class Logger:
         indented_text = indent(task.name, '  ').strip()
 
         self._print(f'{indicator_text} {indented_text}\n')
+
+    def start_suite(self, text: str, key: Hashable = None, **kwargs) -> Tuple[Hashable, 'Logger']:
+        '''Start child suite and return `rpa_logger.logger.Logger` for the
+        created suite.
+
+        By default, the created suite uses new `StringIO` instance as
+        `target.`. Other `rpa_logger.logger.LoggerOutputOptions` are inherited
+        from current suite. This can be overridden by suitable `kwargs`.
+
+        To finish child suite, use `rpa_logger.logger.Logger.finish_task` method of the parent suite.
+
+        Args:
+            text: Name of the for the suite to be created.
+            key: Key to identify the task with. If not provided, new uuid4
+                will be used.
+            kwargs: Parameters for the new `rpa_logger.logger.Logger`.
+
+        Returns:
+            New `rpa_logger.logger.Logger` for the created suite as a tuple.
+        '''
+        self.stop_progress_animation()
+
+        params = {
+            **asdict(self.options),
+            'target': StringIO(),
+            **(kwargs or {}),
+            'key': key,
+        }
+        logger = Logger(**params)
+        logger.title(text)
+        self.suite.add_task(logger.suite)
+
+        self._print_active()
+
+        return logger
 
     def start_task(self, text: str, key: Hashable = None) -> Hashable:
         '''Create a new active task and print progress indicator.
@@ -265,15 +303,16 @@ class Logger:
         if text:
             task.name = text
 
-        if self.options.print_output_immediately and task.output:
-            clear_current_row(self.options.target)
+        output = [] if task.type == 'SUITE' else task.output
+        if self.options.print_output_immediately and output:
+            clear_current_row(self._target)
             self._print('')
 
         self._print_task(key)
 
         if not self.options.print_output_immediately:
             output_text = indent(
-                '\n'.join(i.text for i in task.output), '  ').rstrip()
+                '\n'.join(i.text for i in output), '  ').rstrip()
             if output_text:
                 self._print(f'{output_text}\n')
 
