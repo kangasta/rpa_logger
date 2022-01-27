@@ -4,72 +4,21 @@ This module contains the `rpa_logger.logger.Logger` class and default
 functions it uses for its callback parameters.
 '''
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from io import StringIO
 from sys import stdout
 from textwrap import indent
 from threading import Event, Thread
-from typing import Callable, Hashable, Tuple, TextIO
+from typing import Any, Callable, Hashable, Tuple, TextIO
 
-from .task import *
+from .task import TaskSuite
+from .defaults import *
 from .utils.terminal import (
     bold,
     clear_current_row,
     color,
     print_spinner_and_text,
     remove_ansi_escapes)
-
-
-def get_indicator(status: str, ascii_only: bool = False) -> Tuple[str, str]:
-    '''Default value for `indicator_fn` parameter of
-    `rpa_logger.logger.Logger`.
-
-    Args:
-        status: Status of the task to be logged.
-        ascii_only: If true, use ascii only characters.
-
-    Returns:
-        Tuple of color and character to use as the status indicator.
-    '''
-    if status == SUCCESS:
-        return ('green', '✓' if not ascii_only else 'Y',)
-    if status == IGNORED:
-        return ('magenta', '✓' if not ascii_only else 'I',)
-    elif status == FAILURE:
-        return ('red', '✗' if not ascii_only else 'X',)
-    elif status == ERROR:
-        return ('yellow', '!',)
-    elif status == SKIPPED:
-        return ('blue', '–',)
-    elif status == STARTED:
-        return ('white', '#',)
-    else:
-        return ('grey', '?',)
-
-
-def multiple_active_text(num_active: int) -> str:
-    '''Default value for `multiple_fn` parameter of `rpa_logger.logger.Logger`.
-
-    Args:
-        num_active: Number of currently active tasks.
-
-    Returns:
-        String to print when multiple tasks are in progress.
-    '''
-    return f'{num_active} tasks in progress'
-
-
-def is_status_ok(status: str) -> bool:
-    '''Default value for `status_ok_fn` parameter of
-    `rpa_logger.logger.Logger`.
-
-    Args:
-        status: Status to determine OK status for.
-
-    Returns:
-        True if given status is OK, False otherwise.
-    '''
-    return status not in (FAILURE, ERROR,)
 
 
 @dataclass
@@ -96,12 +45,12 @@ class Logger:
         target: File to print output to. Defaults to stdout.
         multiple_fn: Function used to determine progress message when multiple
             tasks are in progress. Defaults to
-            `rpa_logger.logger.multiple_active_text`.
+            `rpa_logger.defaults.multiple_active_text`.
         indicator_fn: Function used to determine the color and character for
             the status indicator. Defaults to
-            `rpa_logger.logger.get_indicator`.
+            `rpa_logger.defaults.get_indicator`.
         status_ok_fn: Function used to determine if given task status is ok.
-            Defaults to `rpa_logger.logger.get_indicator`.
+            Defaults to `rpa_logger.defaults.is_status_ok`.
         key: Key to identify loggers suite with.
     '''
 

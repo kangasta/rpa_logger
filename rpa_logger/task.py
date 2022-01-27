@@ -6,16 +6,8 @@ from typing import Any, Dict, Hashable, List, Union
 from uuid import uuid4
 
 from .utils import timestamp
+from .defaults import STARTED
 from .utils.output import OutputText
-
-STARTED = 'STARTED'
-SUCCESS = 'SUCCESS'
-IGNORED = 'IGNORED'
-FAILURE = 'FAILURE'
-ERROR = 'ERROR'
-SKIPPED = 'SKIPPED'
-
-STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)
 
 
 @dataclass
@@ -46,7 +38,11 @@ class BaseTask:
     processed in the task.
     '''
 
-    def __init__(self, name: Union[str, None], status: str = STARTED, key: Hashable = None) -> None:
+    def __init__(self,
+                 name: Union[str,
+                             None],
+                 status: str = STARTED,
+                 key: Hashable = None) -> None:
         '''
         Args:
             name: Name of the task.
@@ -55,7 +51,7 @@ class BaseTask:
         '''
         self.status = status
         self.name = name
-        self.key = key or uuid4()
+        self.key = key or str(uuid4())
         self.started = timestamp()
         self.finished = None
         self.metadata = dict()
@@ -86,7 +82,11 @@ class Task(BaseTask):
     '''
     output: List[OutputText]
 
-    def __init__(self, name: str, status: str = STARTED, key: Hashable = None) -> None:
+    def __init__(
+            self,
+            name: str,
+            status: str = STARTED,
+            key: Hashable = None) -> None:
         '''
         Args:
             name: Name of the task.
@@ -162,7 +162,8 @@ class TaskSuite(BaseTask):
         return Counter(i.status for i in self._tasks.values())
 
     def add_task(self, task: BaseTask) -> Hashable:
-        '''Add existing `rpa_logger.task.Task` or `rpa_logger.task.TaskSuite` to the suite.
+        '''Add existing `rpa_logger.task.Task` or `rpa_logger.task.TaskSuite`
+        to the suite.
 
         Args:
             task: Existing `rpa_logger.task.BaseTask` instance to be added.
@@ -189,7 +190,7 @@ class TaskSuite(BaseTask):
             Key of the created task.
         '''
         if not key:
-            key = uuid4()
+            key = str(uuid4())
 
         self._tasks[key] = Task(name, status, key)
         return key
