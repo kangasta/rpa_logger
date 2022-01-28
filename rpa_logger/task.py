@@ -6,16 +6,8 @@ from typing import Any, Dict, Hashable, List, Union
 from uuid import uuid4
 
 from .utils import timestamp
+from .defaults import STARTED
 from .utils.output import OutputText
-
-STARTED = 'STARTED'
-SUCCESS = 'SUCCESS'
-IGNORED = 'IGNORED'
-FAILURE = 'FAILURE'
-ERROR = 'ERROR'
-SKIPPED = 'SKIPPED'
-
-STATUSES = (STARTED, SUCCESS, IGNORED, FAILURE, ERROR, SKIPPED,)
 
 
 @dataclass
@@ -23,6 +15,8 @@ class BaseTask:
     '''Base class to define common functionality of `rpa_logger.task.Task` and
     `rpa_logger.task.TaskSuite`
     '''
+    key: str
+    '''Unique identifier for the task.'''
     type: str
     '''Used to identify task type, when task is presented as dict'''
     name: Union[str, None]
@@ -44,14 +38,20 @@ class BaseTask:
     processed in the task.
     '''
 
-    def __init__(self, name: Union[str, None], status: str = STARTED) -> None:
+    def __init__(self,
+                 name: Union[str,
+                             None],
+                 status: str = STARTED,
+                 key: Hashable = None) -> None:
         '''
         Args:
             name: Name of the task.
             status: Status to use for the started task.
+            key: Unique identifier for the task.
         '''
         self.status = status
         self.name = name
+        self.key = key or str(uuid4())
         self.started = timestamp()
         self.finished = None
         self.metadata = dict()
@@ -82,13 +82,18 @@ class Task(BaseTask):
     '''
     output: List[OutputText]
 
-    def __init__(self, name: str, status: str = STARTED):
+    def __init__(
+            self,
+            name: str,
+            status: str = STARTED,
+            key: Hashable = None) -> None:
         '''
         Args:
             name: Name of the task.
             status: Status to use for the started task.
+            key: Unique identifier for the task.
         '''
-        super().__init__(name, status)
+        super().__init__(name, status, key)
         self.output = list()
 
     @property
@@ -110,20 +115,22 @@ class TaskSuite(BaseTask):
     '''Defines task suite and stores its tasks and metadata
     '''
     description: Union[str, None]
-    tasks: List[Task]
+    tasks: List[BaseTask]
 
     def __init__(
             self,
             name: Union[str, None],
             description: str = None,
-            status: str = STARTED):
+            status: str = STARTED,
+            key: Hashable = None):
         '''
         Args:
             name: Name of the task suite.
             description: Description of the task suite.
             status: Status to use for the started task suite.
+            key: Unique identifier for the task.
         '''
-        super().__init__(name, status)
+        super().__init__(name, status, key)
         self.description = description
         self._tasks: Dict[Hashable, Task] = dict()
 
@@ -154,6 +161,19 @@ class TaskSuite(BaseTask):
         '''
         return Counter(i.status for i in self._tasks.values())
 
+    def add_task(self, task: BaseTask) -> Hashable:
+        '''Add existing `rpa_logger.task.Task` or `rpa_logger.task.TaskSuite`
+        to the suite.
+
+        Args:
+            task: Existing `rpa_logger.task.BaseTask` instance to be added.
+
+        Returns:
+            Key of the added task.
+        '''
+        self._tasks[task.key] = task
+        return task.key
+
     def create_task(
             self,
             name: str,
@@ -170,9 +190,9 @@ class TaskSuite(BaseTask):
             Key of the created task.
         '''
         if not key:
-            key = uuid4()
+            key = str(uuid4())
 
-        self._tasks[key] = Task(name, status)
+        self._tasks[key] = Task(name, status, key)
         return key
 
     def log_task(self, status: str, name: str) -> None:

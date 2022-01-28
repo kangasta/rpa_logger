@@ -1,0 +1,35 @@
+{% set h_name = 'h3' if main_level else 'h4' %}
+<{{ h_name }} id="task-{{ task.key }}" class="name">{{task.status | status_to_html }} {{ task.name | default('Unnamed task') | indent_name }}</{{ h_name }}>
+{% if task.type == 'SUITE'%}
+<p>Go to <a href="#suite-{{ task.key }}">child suite</a></p>
+<div class="status-breakdown">
+  {% for status, count in task.task_status_counter.items() %}
+    <div class="status-breakdown-item">
+      {{ status | status_to_html }} {{ status | title }}: {{ count }}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+<table class="metadata">
+  <tbody>
+    <tr><td>started</td><td>{{ task.started }}</td></tr>
+    <tr><td>finished</td><td>{{ task.finished }}</td></tr>
+    {% for key, value in task.metadata.items() %}
+      <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if task.type == 'TASK'%}
+<table class="output">
+  <tbody>
+    {% for line in task.output %}
+      <tr>
+        {% if output_timestamps %}
+          <td class="timestamp">{{ line.timestamp[11:] }}</td>
+        {% endif %}
+        <td class="{{ line.stream }}">{{ line.text }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

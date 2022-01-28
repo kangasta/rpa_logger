@@ -2,7 +2,7 @@ from io import StringIO
 from unittest import TestCase
 
 from rpa_logger import Logger
-from rpa_logger.task import ERROR, FAILURE, IGNORED, SKIPPED, SUCCESS
+from rpa_logger.defaults import ERROR, FAILURE, IGNORED, SKIPPED, SUCCESS
 from rpa_logger.utils.args import get_argparser, get_rpa_logger_parameters
 
 

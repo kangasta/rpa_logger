@@ -3,7 +3,8 @@ import json
 from unittest import TestCase
 from uuid import uuid4
 
-from rpa_logger.task import ERROR, FAILURE, SKIPPED, SUCCESS, TaskSuite
+from rpa_logger.defaults import ERROR, FAILURE, SKIPPED, SUCCESS
+from rpa_logger.task import TaskSuite
 
 class TaskTest(TestCase):
     def test_active_tasks(self):

@@ -10,7 +10,7 @@ The logging is done via `rpa_logger.logger.Logger` class. It provides `rpa_logge
 .. include:: ../examples/hello_world.py
 ```
 
-When finishing the task, task must be assigned an status. The status can be any string. The status is used to determine the status indicator for the task, for example `✓` or `✗`. This is done, by default, by the `rpa_logger.logger.get_indicator` function.
+When finishing the task, task must be assigned an status. The status can be any string. The status is used to determine the status indicator for the task, for example `✓` or `✗`. This is done, by default, by the `rpa_logger.defaults.get_indicator` function.
 
 For short tasks, `rpa_logger.logger.Logger.start_task` can be omitted. In this case task description should be given as parameter to the `rpa_logger.logger.Logger.finish_task` method. Alternatively, `rpa_logger.logger.Logger.log_task`, an alias for finish_task, can be used in this case.
 
